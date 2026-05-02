@@ -1,0 +1,37 @@
+{
+  "name": "what7",
+  "version": "0.1.0",
+  "description": "Agentsview-style local Codex session manager with shareable Cloudflare Worker publishing.",
+  "type": "module",
+  "bin": {
+    "what7": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "worker",
+    "fixtures",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "verify": "npm run lint && npm run test && npm run build",
+    "worker:dev": "wrangler dev --config worker/wrangler.jsonc --local",
+    "worker:types": "wrangler types --config worker/wrangler.jsonc worker/src/env.d.ts"
+  },
+  "dependencies": {
+    "commander": "^14.0.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260430.0",
+    "@types/node": "^25.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "wrangler": "^4.51.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

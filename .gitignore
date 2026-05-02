@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.what7/
+*.local.html
+.DS_Store
+.dev.vars
+worker/.wrangler/
+
+fixtures/*.html
+worker/.dev.vars

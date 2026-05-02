@@ -1,0 +1,6 @@
+{"timestamp":"2026-05-01T03:20:00.000Z","type":"session_meta","payload":{"id":"sample-session-001","cwd":"/tmp/what7-demo","model":"gpt-5.4"}}
+{"timestamp":"2026-05-01T03:20:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"请把这个小工具做成可分享的 HTML。"}]}}
+{"timestamp":"2026-05-01T03:20:02.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"Need parse JSONL, group messages and tool calls, then render a single HTML file."}]}}
+{"timestamp":"2026-05-01T03:20:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"call_01","arguments":"{\"cmd\":\"printf 'hello from fixture'\"}"}}
+{"timestamp":"2026-05-01T03:20:04.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_01","output":"hello from fixture\n\n```ts\nexport const ok = true;\n```\n\nThis output is intentionally short."}}
+{"timestamp":"2026-05-01T03:20:05.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"已生成 HTML。\n\n- 支持 Markdown\n- 支持代码块\n- 工具输出默认折叠"}]}}
