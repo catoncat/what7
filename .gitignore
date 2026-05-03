@@ -9,3 +9,5 @@ worker/.wrangler/
 
 fixtures/*.html
 worker/.dev.vars
+.ml-cache/
+.mainline/local.toml
