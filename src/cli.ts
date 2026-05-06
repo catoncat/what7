@@ -8,6 +8,14 @@ import { startStaticFileServer, openBrowser } from "./server.js";
 import { startDashboard } from "./dashboard.js";
 import { StateStore, toSafeRecord } from "./state.js";
 import { SessionIndexStore, syncSessions } from "./sessionIndex.js";
+import {
+  findHumanSessions,
+  formatSearchRows,
+  formatSessionPreview,
+  formatSessionRows,
+  recentHumanSessions,
+  resolveHumanSessionTarget,
+} from "./humanWorkflow.js";
 
 interface GlobalOptions {
   stateDir?: string;
@@ -23,6 +31,141 @@ program
   .option("--state-dir <dir>", "override local state directory")
   .option("--json", "emit stable JSON output");
 
+
+program
+  .command("recent")
+  .option("--project <project>", "prefer/filter this project; defaults to current cwd basename")
+  .option("--all-projects", "do not prefer the current cwd project")
+  .option("--since <date>", "include sessions after this date")
+  .option("--until <date>", "include sessions before this date")
+  .option("--limit <n>", "maximum rows", parsePositiveInt)
+  .option("--json", "emit stable JSON output")
+  .description("Show recent Codex sessions, preferring the current project.")
+  .action(async (options: { project?: string; allProjects?: boolean; since?: string; until?: string; limit?: number; json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const result = await recentHumanSessions(new SessionIndexStore(globals.stateDir), {
+        cwd: process.cwd(),
+        project: options.project,
+        allProjects: options.allProjects,
+        since: options.since,
+        until: options.until,
+        limit: options.limit,
+      });
+      output(options.json || globals.json, result, formatSessionRows(result.sessions, result.scope));
+    });
+  });
+
+program
+  .command("find")
+  .argument("<query>", "text to find in indexed sessions")
+  .option("--project <project>", "prefer/filter this project; defaults to current cwd basename")
+  .option("--all-projects", "do not prefer the current cwd project")
+  .option("--since <date>", "include sessions after this date")
+  .option("--until <date>", "include sessions before this date")
+  .option("--limit <n>", "maximum hits", parsePositiveInt)
+  .option("--json", "emit stable JSON output")
+  .description("Find relevant sessions by phrase, preferring the current project.")
+  .action(async (query: string, options: { project?: string; allProjects?: boolean; since?: string; until?: string; limit?: number; json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const result = await findHumanSessions(new SessionIndexStore(globals.stateDir), query, {
+        cwd: process.cwd(),
+        project: options.project,
+        allProjects: options.allProjects,
+        since: options.since,
+        until: options.until,
+        limit: options.limit,
+      });
+      output(options.json || globals.json, result, formatSearchRows(result.hits, result.scope));
+    });
+  });
+
+program
+  .command("view")
+  .argument("[session-or-query]", "session id, JSONL path, or phrase; omitted means recent current-project session")
+  .option("--project <project>", "prefer/filter this project; defaults to current cwd basename")
+  .option("--all-projects", "do not prefer the current cwd project")
+  .option("--tools", "include tool calls/results in terminal preview")
+  .option("--context", "include reasoning/context in terminal preview")
+  .option("--json", "emit stable JSON output")
+  .description("Preview a clean terminal transcript for a session.")
+  .action(async (target: string | undefined, options: { project?: string; allProjects?: boolean; tools?: boolean; context?: boolean; json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const store = new SessionIndexStore(globals.stateDir);
+      const resolved = await resolveHumanSessionTarget(store, target, {
+        cwd: process.cwd(),
+        project: options.project,
+        allProjects: options.allProjects,
+      });
+      if (!resolved.session) {
+        output(options.json || globals.json, resolved, `Resolved ${resolved.inputPath}\nRun: what7 render ${resolved.inputPath}`);
+        return;
+      }
+      const messages = await store.messages(resolved.session.id);
+      output(options.json || globals.json, { ...resolved, messages }, formatSessionPreview(resolved.session, messages, { includeTools: options.tools, includeContext: options.context }));
+    });
+  });
+
+program
+  .command("share")
+  .argument("[session-or-query]", "session id, JSONL path, or phrase; omitted means recent current-project session")
+  .option("-o, --output <file>", "also write rendered HTML to this path")
+  .option("--title <title>", "override page title")
+  .option("--project <project>", "prefer/filter this project; defaults to current cwd basename")
+  .option("--all-projects", "do not prefer the current cwd project")
+  .option("--worker-url <url>", "Cloudflare Worker base URL; defaults to WHAT7_WORKER_URL")
+  .option("--admin-token <token>", "Worker admin token; defaults to WHAT7_ADMIN_TOKEN")
+  .option("--debug-url", "also print a debug URL with ?tools=1&context=1")
+  .option("--no-redact", "disable default secret redaction")
+  .option("--json", "emit stable JSON output")
+  .description("Find, render, and publish a session in one human-friendly command.")
+  .action(async (target: string | undefined, options: { output?: string; title?: string; project?: string; allProjects?: boolean; workerUrl?: string; adminToken?: string; debugUrl?: boolean; redact?: boolean; json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const store = new SessionIndexStore(globals.stateDir);
+      const resolved = await resolveHumanSessionTarget(store, target, {
+        cwd: process.cwd(),
+        project: options.project,
+        allProjects: options.allProjects,
+      });
+      const workerUrl = options.workerUrl ?? process.env.WHAT7_WORKER_URL;
+      const adminToken = options.adminToken ?? process.env.WHAT7_ADMIN_TOKEN;
+      if (!workerUrl) throw new Error("Missing Worker URL. Set WHAT7_WORKER_URL or pass --worker-url.");
+      const rendered = await renderFile(resolved.inputPath, {
+        outputPath: options.output,
+        title: options.title,
+        redact: options.redact,
+      });
+      const published = await new PublishClient({ workerUrl, adminToken }).publish({
+        title: rendered.title,
+        html: rendered.html,
+        sourcePath: path.resolve(resolved.inputPath),
+        sourceHash: rendered.sourceHash,
+      });
+      const record = await new StateStore(globals.stateDir).add({
+        remoteId: published.id,
+        url: published.url,
+        sourcePath: path.resolve(resolved.inputPath),
+        title: rendered.title,
+        deleteCapability: published.deleteToken,
+        workerUrl,
+        htmlPath: rendered.outputPath,
+      });
+      const debugUrl = `${published.url}?tools=1&context=1`;
+      const payload = {
+        record: toSafeRecord(record),
+        url: published.url,
+        ...(options.debugUrl ? { debug_url: debugUrl } : {}),
+        local_id: record.localId,
+        remote_id: record.remoteId,
+        session_id: resolved.session?.id,
+        resolved_from: resolved.reason,
+      };
+      output(options.json || globals.json, payload, `Published ${published.url}\nLocal record ${record.localId}${options.debugUrl ? `\nDebug ${debugUrl}` : ""}`);
+    });
+  });
 
 program
   .command("sync")
@@ -194,7 +337,6 @@ program
 
 program
   .command("publish")
-  .alias("share")
   .argument("<session.jsonl>", "Codex session JSONL file")
   .option("-o, --output <file>", "also write rendered HTML to this path")
   .option("--title <title>", "override page title")
@@ -277,7 +419,7 @@ function addDashboardCommand(name: "dashboard" | "serve"): void {
     .option("--port <port>", "local dashboard port", parsePort)
     .option("--no-open", "do not open browser")
     .option("--json", "emit server URL as JSON")
-    .description("Start the local web dashboard for publish history and unpublish.")
+    .description("Start the local workbench: browse sessions, preview transcripts, share/unpublish.")
     .action(async (options: { port?: number; open?: boolean; json?: boolean }) => {
       await run(async () => {
         const globals = program.opts<GlobalOptions>();

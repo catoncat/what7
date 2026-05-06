@@ -83,6 +83,7 @@ export interface ListSessionFilters {
   since?: string;
   until?: string;
   limit?: number;
+  offset?: number;
 }
 
 export interface SearchHit {
@@ -173,15 +174,22 @@ export class SessionIndexStore {
     const q = query.trim().toLowerCase();
     if (!q) return [];
     const index = await this.load();
-    const sessions = new Map(filterSessions(index.sessions, filters).map((session) => [session.id, session]));
+    const sessionFilters = { ...filters, limit: undefined, offset: undefined };
+    const sessions = new Map(filterSessions(index.sessions, sessionFilters).map((session) => [session.id, session]));
     const hits: SearchHit[] = [];
     const limit = filters.limit ?? 200;
+    const offset = Math.max(0, filters.offset ?? 0);
+    let skipped = 0;
     for await (const message of this.iterMessages()) {
       if (hits.length >= limit) break;
       const session = sessions.get(message.sessionId);
       if (!session) continue;
       const haystack = `${message.title}\n${message.content}`.toLowerCase();
       if (!haystack.includes(q)) continue;
+      if (skipped < offset) {
+        skipped += 1;
+        continue;
+      }
       hits.push({ session, message, snippet: makeSnippet(message.content, query) });
     }
     return hits;
@@ -532,7 +540,11 @@ export function filterSessions(sessions: ManagedSession[], filters: ListSessionF
     return true;
   });
   out = out.sort(compareSessionsDesc);
-  if (filters.limit && filters.limit > 0) out = out.slice(0, filters.limit);
+  const offset = Math.max(0, filters.offset ?? 0);
+  if (offset > 0 || (filters.limit && filters.limit > 0)) {
+    const end = filters.limit && filters.limit > 0 ? offset + filters.limit : undefined;
+    out = out.slice(offset, end);
+  }
   return out;
 }
 

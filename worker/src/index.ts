@@ -73,6 +73,8 @@ async function getShare(env: What7Env, id: string, head = false): Promise<Respon
 async function publish(request: Request, env: What7Env): Promise<Response> {
   const authorized = await isAdminAuthorized(request, env);
   if (!authorized) return json({ error: "unauthorized" }, 401);
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return json({ error: "content-type must be application/json" }, 415);
   const length = Number(request.headers.get("content-length") ?? "0");
   if (length > MAX_HTML_BYTES) return json({ error: "share artifact too large" }, 413);
 

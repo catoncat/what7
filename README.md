@@ -1,6 +1,10 @@
 # what7
 
-`what7` is an agentsview-style local Codex session manager with Cloudflare share publishing. It discovers local Codex JSONL sessions, indexes them for browsing/search/usage summaries, serves a local web dashboard, renders standalone transcript HTML, and publishes/unpublishes public share pages through a Worker backend.
+`what7` is a human-friendly local product layer for Codex sessions. It helps you find a recent or relevant local conversation, preview it as a clean transcript, and publish a shareable read-only page through a Cloudflare Worker.
+
+Positioning:
+
+> `cxs` is agent-friendly session retrieval infrastructure. `what7` is the human-friendly find → preview → share product layer. It can reuse the same progressive-retrieval ideas, but it should not become another recall backend.
 
 ## Install
 
@@ -10,75 +14,115 @@ npm run build
 npm link   # optional, exposes `what7`
 ```
 
-Without `npm link`, run the CLI with:
+Without `npm link`, run commands with:
 
 ```bash
 node dist/cli.js --help
 ```
 
+## Daily workflow: find → preview → share
 
-## Session management quick start
-
-Index local Codex sessions:
-
-```bash
-npm run build
-node dist/cli.js sync --json
-```
-
-By default this scans `~/.codex/sessions`. Override with either `CODEX_SESSIONS_DIR` or repeated `--dir` flags:
+First index local Codex sessions. By default this scans `~/.codex/sessions`:
 
 ```bash
-node dist/cli.js sync --dir ~/.codex/sessions --dir /path/to/fixtures --json
+what7 sync
+# or without npm link:
+node dist/cli.js sync
 ```
 
-Browse indexed sessions in the local dashboard:
+Then use the human-friendly commands from any project directory:
 
 ```bash
-source .what7/deploy.env   # optional, enables dashboard Publish button
-node dist/cli.js dashboard --no-open --json
+what7 recent                 # recent sessions, preferring the current cwd project
+what7 find "memorable text"   # full-text hits, preferring the current cwd project
+what7 view <session-id>      # clean terminal preview
+what7 share <session-id>     # render + publish + print URL
+what7 share                  # share the most recent current-project session
 ```
 
-The dashboard provides the agentsview-style core loop: session list, message search, analytics cards, transcript viewer, publish, unpublish, and local/remote share links.
-
-CLI session-management commands:
+Useful filters:
 
 ```bash
-node dist/cli.js sessions --json
-node dist/cli.js session <session-id> --json
-node dist/cli.js search "query" --json
-node dist/cli.js usage --json
-node dist/cli.js stats --json
-node dist/cli.js publish-session <session-id> --json
+what7 recent --all-projects --limit 20
+what7 find "deploy failed" --project what7 --since 2026-05-01
+what7 view <session-id> --tools --context
+what7 share "memorable text" --debug-url
 ```
 
-`publish-session` accepts an indexed session id such as `codex:<uuid>` or a direct JSONL path. `share-session` is an alias.
-
-## Render local HTML
+All human commands still support stable machine output:
 
 ```bash
-npm run build
-node dist/cli.js render fixtures/sample.jsonl --json
+what7 recent --json
+what7 find "query" --json
+what7 share <session-id> --json
 ```
 
-Output defaults to `fixtures/sample.html`. The file is standalone and can be opened directly in a browser. The page includes an agentsview-style sticky header, search, dark/light mode, newest-first toggle, context/thinking toggle, tool-block toggle, collapsible tool cards, and long-output previews.
-
-Useful options:
+## Local Web workbench
 
 ```bash
-node dist/cli.js render fixtures/sample.jsonl -o /tmp/session.html --title "Demo"
-node dist/cli.js render fixtures/sample.jsonl --no-redact
+source .what7/deploy.env   # optional, enables the Share button
+what7 serve --no-open --json
 ```
 
-Redaction is enabled by default. Use `--no-redact` only for trusted local-only output.
+Open the returned local URL. The workbench is designed for large corpora:
 
-## Local preview
+- first load fetches only a bounded recent page (`30` sessions by default);
+- `Load more`, search, project filter, and date filters are progressive;
+- stats/analytics are **on demand** and do not block first paint;
+- selecting a session renders the full transcript only for that one session;
+- actions are centered on `Share`, `Copy link`, `Open local`, `Debug view`, and `Unpublish`.
+
+The dashboard never sends the full session corpus to the browser on page load.
+
+## Clean share pages by default
+
+Share pages are for people reading the conversation, not for inspecting internal trace.
+
+Default behavior with no query params:
+
+- tool calls and tool outputs are hidden;
+- event, metadata, reasoning, and context blocks are hidden;
+- source-path/debug metadata is hidden;
+- messages remain readable and searchable.
+
+Debug layers are explicit URL query parameters:
+
+```text
+?tools=1              # show tool calls/results
+?context=1            # show reasoning/metadata/context
+?events=1             # alias for context-style event visibility
+?reasoning=1          # alias for context
+?debug=1              # show tools + context
+```
+
+Typical debug link:
+
+```text
+https://<worker>/s/<id>?tools=1&context=1
+```
+
+The page also includes local toggles, but the initial state is always clean unless the URL explicitly opts in.
+
+## Explicit file commands remain available
+
+For low-level or scripted workflows, you can still operate on a JSONL path directly:
 
 ```bash
-node dist/cli.js preview fixtures/sample.jsonl --no-open --json
+what7 render fixtures/sample.jsonl --json
+what7 preview fixtures/sample.jsonl --no-open --json
+what7 publish fixtures/sample.jsonl --json
 ```
 
-Remove `--no-open` to open the default browser. The command keeps a local HTTP server running until Ctrl-C.
+Compatibility/agent-oriented commands are still present:
+
+```bash
+what7 sessions --json
+what7 session <session-id> --json
+what7 search "query" --json
+what7 usage --json
+what7 stats --json
+what7 publish-session <session-id> --json
+```
 
 ## Cloudflare Worker setup
 
@@ -103,7 +147,15 @@ The Worker lives in `worker/` and uses KV for share storage.
    npx wrangler deploy --config worker/wrangler.jsonc
    ```
 
-For local Worker smoke testing, create an untracked `worker/.dev.vars` file (next to `wrangler.jsonc`) or run with environment variables:
+Configure local publishing:
+
+```bash
+export WHAT7_WORKER_URL="https://what7-share.<your-subdomain>.workers.dev"
+export WHAT7_ADMIN_TOKEN="<secret from wrangler secret put>"
+what7 share <session-id>
+```
+
+For local Worker smoke testing:
 
 ```bash
 cat > worker/.dev.vars <<'EOF_DEV'
@@ -112,22 +164,23 @@ EOF_DEV
 npx wrangler dev --config worker/wrangler.jsonc --local --port 8787
 ```
 
-## Publish / Share
+In another terminal:
 
 ```bash
-export WHAT7_WORKER_URL="https://what7-share.<your-subdomain>.workers.dev"
-export WHAT7_ADMIN_TOKEN="<secret from wrangler secret put>"
-node dist/cli.js publish fixtures/sample.jsonl --json
-# alias:
-node dist/cli.js share fixtures/sample.jsonl --json
+npm run build
+export WHAT7_WORKER_URL=http://127.0.0.1:8787
+export WHAT7_ADMIN_TOKEN=local-dev-token-change-me
+export WHAT7_STATE_DIR=$(mktemp -d)
+what7 share fixtures/sample.jsonl --json
+what7 list --json
+what7 unpublish <local-id> --json
 ```
 
-The JSON output includes the public share URL and local record id. It does **not** print the delete capability. The delete capability is stored in local state so CLI/dashboard can unpublish later.
-
-## List history
+## Publish history and unpublish
 
 ```bash
-node dist/cli.js list --json
+what7 list --json
+what7 unpublish <local-id-or-url> --json
 ```
 
 State directory resolution:
@@ -137,55 +190,7 @@ State directory resolution:
 3. macOS: `~/Library/Application Support/what7`
 4. Other systems: `~/.local/state/what7`
 
-## Dashboard
-
-```bash
-source .what7/deploy.env   # optional; only needed for publish from the dashboard
-node dist/cli.js dashboard --no-open --json
-```
-
-Open the returned local URL. The dashboard can sync Codex sessions, search/browse indexed sessions, render the selected transcript, show analytics/usage cards, publish the selected session, open remote/local HTML, and unpublish published shares. Delete tokens are not exposed in the dashboard API; the local backend performs unpublish.
-
-## Unpublish
-
-```bash
-node dist/cli.js unpublish <local-id-or-url> --json
-```
-
-After unpublish, `GET /s/:id` on the Worker returns HTTP 410 with an unpublished page, and the local state record changes to `unpublished`.
-
-## Smoke test against local Worker
-
-Terminal 1:
-
-```bash
-cat > worker/.dev.vars <<'EOF_DEV'
-WHAT7_ADMIN_TOKEN=local-dev-token-change-me
-EOF_DEV
-npx wrangler dev --config worker/wrangler.jsonc --local --port 8787
-```
-
-Terminal 2:
-
-```bash
-npm run build
-export WHAT7_WORKER_URL=http://127.0.0.1:8787
-export WHAT7_ADMIN_TOKEN=local-dev-token-change-me
-export WHAT7_STATE_DIR=$(mktemp -d)
-node dist/cli.js publish fixtures/sample.jsonl --json
-node dist/cli.js list --json
-curl -i "http://127.0.0.1:8787/s/<remote-id>"
-node dist/cli.js unpublish <local-id> --json
-curl -i "http://127.0.0.1:8787/s/<remote-id>"   # should be 410
-```
-
-## Verification
-
-```bash
-npm run verify
-```
-
-This runs typecheck, unit/integration tests, and build.
+The JSON output includes public share URLs and local record ids. It does **not** print delete capabilities. Delete capabilities are stored only in local state so CLI/dashboard can unpublish later.
 
 ## Security notes
 
@@ -195,6 +200,19 @@ This runs typecheck, unit/integration tests, and build.
 - Worker stores only a hash of the delete token. The local state file stores the delete capability and is written with user-only permissions when created.
 - `list --json` and dashboard APIs omit delete capability values.
 
-## agentsview reference
+## cxs boundary
 
-This project now implements the Codex-focused local session-management slice of agentsview plus Cloudflare share/unpublish. See `docs/agentsview-reference.md` for the mapping and remaining non-goals.
+`what7` should not replace `cxs`.
+
+- `cxs`: progressive retrieval, selectors, coverage, ranking, read-range/read-page, and agent recall infrastructure.
+- `what7`: human product surface: recent list, current-project preference, search entrypoint, clean preview, share/unpublish, and a local Web workbench.
+
+For v1, `what7` keeps basic sharing independent. Future work can add a narrow adapter that detects a local `cxs` install and uses it for retrieval, while preserving this human-facing CLI/Web surface.
+
+## Verification
+
+```bash
+npm run verify
+```
+
+This runs typecheck, tests, and build.

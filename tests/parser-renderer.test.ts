@@ -30,6 +30,20 @@ describe("parser + renderer", () => {
     expect(result.html).not.toContain("<script>alert(1)</script>");
   });
 
+  it("defaults to a clean human reading view and only enables trace layers via query params", () => {
+    const transcript = parseCodexJsonl(fixture, "fixtures/sample.jsonl");
+    const result = renderTranscript(transcript, { generatedAt: "2026-05-01T00:00:00.000Z" });
+
+    expect(result.html).toContain('id="tools-toggle"');
+    expect(result.html).not.toMatch(/id="tools-toggle"[^>]*checked/);
+    expect(result.html).toContain("#tools-toggle:not(:checked) ~ .timeline .kind-tool { display: none; }");
+    expect(result.html).toContain(".context-block { display: none;");
+    expect(result.html).toContain("searchParams.get('tools') === '1'");
+    expect(result.html).toContain("searchParams.get('context') === '1'");
+    expect(result.html).toContain("searchParams.get('events') === '1'");
+    expect(result.html).toContain('class="source-card context-block"');
+  });
+
   it("redacts common secret shapes by default", () => {
     const bearer = "abcdefghijklmnopqrstuvwxyz" + "123456";
     const apiKey = "sk-" + "abcdefghijklmnopqrstuvwxyz";

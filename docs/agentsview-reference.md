@@ -14,11 +14,12 @@ The requested product direction is agentsview-style session management with a fi
 
 ## Product translation for what7
 
-`what7` is now a local session manager plus share tool:
+`what7` is now a local human workbench plus share tool:
 
 - `sync` discovers Codex JSONL sessions under `~/.codex/sessions` or explicit roots.
 - A local JSON index stores session metadata, timeline items, search text, token usage, tool counts, and daily/project/agent aggregates.
-- `dashboard` is the local browser: sessions, search, analytics cards, transcript iframe, publish, unpublish, and share history.
+- `serve` / `dashboard` is the local browser: bounded recent sessions, progressive search/filter/load-more, clean transcript iframe, publish, unpublish, and share history. Analytics are on demand so they do not block first paint.
+- `recent` / `find` / `view` / `share` are the human CLI path for current-project discovery and one-command publishing.
 - `render` / `preview` / `publish` still work on an explicit JSONL file.
 - Cloudflare Worker replaces agentsview's Gist/htmlpreview path so unpublish is possible.
 
@@ -29,7 +30,7 @@ The share page should feel like a public read-only agentsview session viewer:
 - Sticky header with session title, agent/model/source metadata, counts, and publish-safe warning.
 - Timeline cards with role color, timestamp, source line, raw event type, and anchors.
 - Tool calls/results rendered as compact collapsible tool cards with preview lines.
-- Reasoning/thinking/system metadata hidden by default but toggleable.
+- Tool calls/results and reasoning/thinking/system metadata hidden by default but toggleable or URL-query enabled (`?tools=1&context=1`).
 - Search/filter/newest-first/theme controls embedded in the single HTML file.
 - Long outputs default to preview + expandable full content.
 - No CDN or backend dependency inside the share page.

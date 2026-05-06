@@ -1,6 +1,8 @@
 # what7 design
 
-`what7` 是一个本地优先 CLI：Codex JSONL 在本机解析、redact、渲染为单文件 HTML；需要分享时再上传到 Cloudflare Worker。
+`what7` 是一个本地优先、人类友好的 Codex session 产品层：Codex JSONL 在本机解析、redact、渲染为单文件 HTML；用户可以从当前目录快速找到最近/相关 session，预览后再上传到 Cloudflare Worker 分享。
+
+它不替代 `cxs`。`cxs` 更适合做 agent-friendly 的 progressive retrieval、selector、coverage、rank、read-range/read-page；`what7` 保持为 human-friendly 的 recent/find/view/share/Web workbench。v1 可以借鉴/适配 `cxs` 能力，但基本分享不强依赖 `cxs`。
 
 ## 组件
 
@@ -10,6 +12,7 @@
 - `src/state.ts`：XDG/macOS fallback 本地 state，保存 publish history 和 delete capability。
 - `src/publishClient.ts`：Worker publish/unpublish API client。
 - `src/dashboard.ts`：本地 dashboard HTTP server，前端不接触 delete capability。
+- `src/humanWorkflow.ts`：human CLI 的 current-project preference、recent/find target resolution、terminal preview formatting。
 - `worker/src/index.ts`：Cloudflare Worker API + public share reader，KV 存储。
 
 ## State directory
@@ -43,3 +46,30 @@ State 文件：`state.json`，schema version 当前为 `1`。
 ### Large-session indexing
 
 Real `~/.codex/sessions` trees can contain thousands of JSONL files and multi-megabyte tool outputs. `sync` therefore parses JSONL with a line stream, stores session summaries in `sessions.json`, and writes bounded searchable previews to `messages.jsonl`. Full transcript rendering still reads the selected source JSONL on demand, so the index stays bounded while the viewer can show the complete session.
+
+The local Web workbench treats a large corpus as the default:
+
+- `/api/sessions` returns a bounded page (`limit`, `offset`, `has_more`) instead of sending the entire session index to the browser.
+- The first page defaults to 30 sessions and clamps oversized limits server-side.
+- Search/project/date filters are progressive and use the same bounded page shape.
+- `/api/analytics` remains available but is loaded only on demand from the UI.
+- `/api/sessions/:id/html` renders the selected source file on demand.
+
+## Human CLI surface
+
+Primary commands are:
+
+- `what7 recent`：show recent sessions, preferring the current cwd project and falling back globally if empty.
+- `what7 find <query>`：search indexed messages, preferring current-project hits before broad hits.
+- `what7 view <session-or-query>`：terminal preview that hides tools/context unless `--tools` / `--context` is explicit.
+- `what7 share [session-or-query]`：resolve omitted args to the recent current-project session, or resolve ids/paths/query text, then render + publish.
+
+Low-level commands (`sessions`, `session`, `search`, `publish`, `publish-session`) remain available for stable agent/JSON workflows.
+
+## Clean transcript default
+
+Rendered HTML is clean by default:
+
+- tool calls/results are hidden unless `?tools=1` or `?debug=1`;
+- reasoning/event/metadata/source context is hidden unless `?context=1`, `?events=1`, `?reasoning=1`, or `?debug=1`;
+- page toggles can reveal layers after load, but the no-query initial state is human-readable and quiet.
