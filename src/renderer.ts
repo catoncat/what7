@@ -369,6 +369,13 @@ const CSS = `
   --code-bg: #1e1e2e; --code-text: #cdd6f4; --radius-sm: 4px; --radius-md: 8px;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  /* S1 tokens (2026-05) — see docs/design-spec.md */
+  --font-sans-ui: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-serif-read: "Tiempos Text", "Source Serif 4", "Iowan Old Style", Charter, Georgia, serif;
+  --brand-orange: #c9622d; --brand-orange-soft: #fdf0e0; --brand-orange-line: #f3d8b5;
+  --share-bg: #fbf8ee; --share-surface: #ffffff; --share-ink: #1a1a18;
+  --share-fg2: #5b574d; --share-fg3: #8e8a7d;
+  --share-line: #e8dfc3; --share-line2: #d6cdb1;
 }
 :root.dark { color-scheme: dark; --bg-primary: #0c0c10; --bg-surface: #15151b; --bg-inset: #101015; --border-default: #3a3a4a; --border-muted: #2e2e3d; --text-primary: #e2e4e9; --text-secondary: #9ca3af; --text-muted: #8b92a0; --accent-blue: #60a5fa; --accent-purple: #a78bfa; --accent-amber: #fbbf24; --accent-red: #f87171; --accent-green: #34d399; --user-bg: #111827; --assistant-bg: #141220; --context-bg: #1a1530; --tool-bg: #1a1508; --code-bg: #0d0d14; --code-text: #cdd6f4; }
 * { box-sizing: border-box; }
