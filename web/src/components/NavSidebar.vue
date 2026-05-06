@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watchEffect } from "vue";
+import { computed, inject, onMounted, ref, watchEffect } from "vue";
 import { RouterLink } from "vue-router";
 import { agents, projects, sessions } from "@/data/mock";
+import { APP_SHELL_KEY } from "@/shell";
+
+const shell = inject(APP_SHELL_KEY);
 
 type Theme = "auto" | "light" | "dark";
 const THEME_KEY = "what7-theme";
@@ -52,6 +55,12 @@ const agentCounts = computed(() => {
       <span class="logo">⌘</span>
       <span class="name">what7</span>
       <span class="counter" v-text="sessions.length"></span>
+      <button
+        v-if="shell?.isMobile.value"
+        class="close"
+        aria-label="Close navigation"
+        @click="shell?.closeNav()"
+      >×</button>
     </header>
     <div class="search">
       <input placeholder="Search sessions" disabled />
@@ -121,6 +130,15 @@ const agentCounts = computed(() => {
 }
 .brand .name { color: var(--fg); font-weight: 600; flex: 1; }
 .brand .counter { color: var(--fg-3); font-family: var(--font-mono); font-size: 11px; }
+.brand .close {
+  margin-left: 6px;
+  width: 26px; height: 26px;
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  font-size: 18px; line-height: 1;
+  display: grid; place-items: center;
+}
+.brand .close:hover { background: var(--surface-2); color: var(--fg); }
 
 .search {
   display: flex; align-items: center; gap: 6px;

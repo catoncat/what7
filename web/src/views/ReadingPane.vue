@@ -1,6 +1,19 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, inject } from "vue";
+import { useRoute } from "vue-router";
 import { detail } from "@/data/mock";
+import { APP_SHELL_KEY } from "@/shell";
+
+const shell = inject(APP_SHELL_KEY);
+const route = useRoute();
+
+const listPath = computed<string>(() => {
+  const meta = route.meta as { kind?: string; scope?: string };
+  const slug = String(route.params.slug ?? "");
+  if (meta?.kind === "project") return `/projects/${slug}`;
+  if (meta?.kind === "agent") return `/agents/${slug}`;
+  return `/${meta?.scope ?? "inbox"}`;
+});
 
 const props = defineProps<{ id: string }>();
 const sessionDetail = computed(() => detail(props.id));
@@ -19,6 +32,12 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   <article v-if="sessionDetail" class="reader">
     <header class="head">
       <div class="title-row">
+        <RouterLink
+          v-if="shell?.isMobile.value"
+          class="back"
+          :to="listPath"
+          aria-label="Back to list"
+        >‹</RouterLink>
         <h1 v-text="sessionDetail.title"></h1>
         <div class="actions">
           <button class="ghost">Copy link</button>
@@ -61,6 +80,16 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   z-index: 1;
 }
 .title-row { display: flex; align-items: flex-start; gap: 16px; }
+.title-row .back {
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  font-size: 22px; line-height: 1;
+  margin-top: -2px;
+  flex: 0 0 auto;
+}
+.title-row .back:hover { background: var(--surface-2); color: var(--fg); }
 .head h1 {
   flex: 1; margin: 0;
   font-size: 17px; font-weight: 600; color: var(--fg);

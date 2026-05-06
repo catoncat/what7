@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, inject } from "vue";
 import { RouterLink } from "vue-router";
 import { agents } from "@/data/mock";
+import { APP_SHELL_KEY } from "@/shell";
 import type { AgentDef, Session } from "@/types";
+
+const shell = inject(APP_SHELL_KEY);
 
 const props = defineProps<{
   title: string;
@@ -60,6 +63,12 @@ function metaLine(s: Session): string {
 <template>
   <section class="list">
     <header>
+      <button
+        v-if="shell?.isMobile.value"
+        class="menu"
+        aria-label="Open navigation"
+        @click="shell?.openNav()"
+      >☰</button>
       <h2 v-text="title"></h2>
       <span class="count" v-text="sessions.length"></span>
     </header>
@@ -104,6 +113,14 @@ function metaLine(s: Session): string {
   border-bottom: 1px solid var(--line);
   z-index: 1;
 }
+.list > header .menu {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  font-size: 16px;
+}
+.list > header .menu:hover { background: var(--surface-2); color: var(--fg); }
 .list h2 { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--fg); }
 .list .count {
   font-family: var(--font-mono); font-size: 11px;
