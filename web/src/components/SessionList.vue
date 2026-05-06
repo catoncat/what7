@@ -157,8 +157,8 @@ function metaLine(s: Session): string {
   font-family: var(--font-sans); font-size: 9.5px;
   padding: 0 5px; border-radius: 3px; line-height: 14px;
 }
-.tag-shared { color: var(--green); background: rgba(95,184,142,0.12); }
-.tag-draft { color: var(--amber); background: rgba(214,164,90,0.12); }
+.tag-shared { color: var(--green); background: var(--tag-shared-bg); }
+.tag-draft { color: var(--amber); background: var(--tag-draft-bg); }
 .tag-pinned { color: var(--brand); background: var(--brand-soft); }
 .row .time {
   color: var(--fg-3);

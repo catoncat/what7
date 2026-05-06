@@ -79,7 +79,7 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   color: var(--brand);
   border-color: transparent;
 }
-.actions .primary:hover { background: rgba(201,98,45,0.24); }
+.actions .primary:hover { background: var(--brand-soft-hover); }
 .meta {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   margin-top: 8px;
@@ -90,8 +90,8 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   font-family: var(--font-sans); font-size: 9.5px;
   padding: 0 5px; border-radius: 3px; line-height: 14px;
 }
-.tag-shared { color: var(--green); background: rgba(95,184,142,0.12); }
-.tag-draft { color: var(--amber); background: rgba(214,164,90,0.12); }
+.tag-shared { color: var(--green); background: var(--tag-shared-bg); }
+.tag-draft { color: var(--amber); background: var(--tag-draft-bg); }
 .tag-pinned { color: var(--brand); background: var(--brand-soft); }
 
 .body {

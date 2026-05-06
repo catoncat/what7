@@ -1,7 +1,31 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref, watchEffect } from "vue";
 import { RouterLink } from "vue-router";
 import { agents, projects, sessions } from "@/data/mock";
+
+type Theme = "auto" | "light" | "dark";
+const THEME_KEY = "what7-theme";
+const theme = ref<Theme>("auto");
+
+onMounted(() => {
+  const saved = localStorage.getItem(THEME_KEY) as Theme | null;
+  if (saved === "auto" || saved === "light" || saved === "dark") theme.value = saved;
+});
+
+watchEffect(() => {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (theme.value === "auto") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", theme.value);
+  try { localStorage.setItem(THEME_KEY, theme.value); } catch { /* ignore */ }
+});
+
+const themeIcon = computed(() => (theme.value === "light" ? "☀" : theme.value === "dark" ? "☾" : "◐"));
+const themeLabel = computed(() => (theme.value === "auto" ? "Auto" : theme.value === "light" ? "Light" : "Dark"));
+
+function cycleTheme() {
+  theme.value = theme.value === "auto" ? "light" : theme.value === "light" ? "dark" : "auto";
+}
 
 const counts = computed(() => ({
   inbox: sessions.length,
@@ -72,6 +96,10 @@ const agentCounts = computed(() => {
       </RouterLink>
     </section>
     <footer class="foot">
+      <button class="theme" @click="cycleTheme" :title="`Theme: ${themeLabel}`">
+        <span class="theme-icon" v-text="themeIcon"></span>
+        <span v-text="themeLabel"></span>
+      </button>
       <button>Sync now</button>
     </footer>
   </aside>
@@ -134,10 +162,20 @@ const agentCounts = computed(() => {
 .group .label { flex: 1; }
 
 .foot { margin-top: auto; padding: 8px; border-top: 1px solid var(--line); }
+.foot { display: flex; flex-direction: column; gap: 6px; }
 .foot button {
   width: 100%; padding: 6px;
   background: var(--surface-2); border: 1px solid var(--line);
   border-radius: var(--r-sm); color: var(--fg-2);
 }
 .foot button:hover { color: var(--fg); }
+.foot .theme {
+  display: flex; align-items: center; gap: 8px;
+  justify-content: flex-start;
+  padding-left: 10px;
+}
+.foot .theme-icon {
+  width: 16px; text-align: center;
+  color: var(--fg);
+}
 </style>
