@@ -6,6 +6,7 @@ import type {
 	ListSessionFilters,
 	ManagedMessage,
 	ManagedSession,
+	ProjectInfo,
 	SearchHit,
 	TokenUsageSummary,
 } from "./sessionIndex.js";
@@ -93,6 +94,10 @@ export class CxsReader {
 		if (filters.project) {
 			where.push("s.cwd LIKE ?");
 			params.push(`%${filters.project}%`);
+		}
+		if (filters.cwd) {
+			where.push("s.cwd = ?");
+			params.push(filters.cwd);
 		}
 		if (filters.since) {
 			where.push("s.ended_at >= ?");
@@ -263,6 +268,33 @@ export class CxsReader {
 			last7dSessionCount: last7d.c,
 		};
 	}
+
+	listProjects(): ProjectInfo[] {
+		const rows = this.db
+			.prepare(
+				`SELECT cwd AS cwd,
+				        COUNT(*) AS sessionCount,
+				        COALESCE(SUM(message_count), 0) AS messageCount,
+				        MAX(ended_at) AS lastSessionAt
+				   FROM sessions
+				  GROUP BY cwd
+				  ORDER BY lastSessionAt DESC`,
+			)
+			.all() as Array<{
+				cwd: string;
+				sessionCount: number;
+				messageCount: number;
+				lastSessionAt: string | null;
+			}>;
+		return rows.map((r) => ({
+			id: encodeProjectId(r.cwd),
+			name: path.basename(r.cwd),
+			cwd: r.cwd,
+			sessionCount: r.sessionCount,
+			messageCount: r.messageCount,
+			lastSessionAt: r.lastSessionAt,
+		}));
+	}
 }
 
 function rowToSession(row: SessionRow): ManagedSession {
@@ -328,4 +360,12 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
 	const v = value ?? fallback;
 	if (!Number.isFinite(v) || v <= 0) return fallback;
 	return Math.min(Math.floor(v), max);
+}
+
+export function encodeProjectId(cwd: string): string {
+	return Buffer.from(cwd, "utf8").toString("base64url");
+}
+
+export function decodeProjectId(id: string): string {
+	return Buffer.from(id, "base64url").toString("utf8");
 }

@@ -4,7 +4,7 @@ import path from "node:path";
 import { PublishClient } from "./publishClient.js";
 import { listen, close, openBrowser } from "./server.js";
 import { StateStore, toSafeRecord } from "./state.js";
-import { SessionIndexStore, syncSessions } from "./sessionIndex.js";
+import { SessionIndexStore, decodeProjectId, syncSessions } from "./sessionIndex.js";
 import { readTranscriptFile, sha256 } from "./io.js";
 import { renderTranscript } from "./renderer.js";
 
@@ -96,6 +96,125 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
         const all = (await publishStore.list()).map(toSafeRecord);
         const paged = all.slice(offset, offset + limit);
         return sendJson(res, { records: paged, total: all.length });
+      }
+
+      // ---------------------------------------------------------------
+      // /api/v1/* — PRD §8 REST surface for the new web/ frontend.
+      // ---------------------------------------------------------------
+
+      if (req.method === "GET" && url.pathname === "/api/v1/projects") {
+        return sendJson(res, { projects: await sessionStore.listProjects() });
+      }
+
+      const projectSessionsMatch = url.pathname.match(/^\/api\/v1\/projects\/([^/]+)\/sessions$/);
+      if (req.method === "GET" && projectSessionsMatch) {
+        const projectId = decodeURIComponent(projectSessionsMatch[1] ?? "");
+        const cwd = decodeProjectId(projectId);
+        const limit = clampLimit(numberParam(url.searchParams.get("limit")));
+        const offset = numberParam(url.searchParams.get("offset")) ?? 0;
+        const sessions = await sessionStore.list({
+          cwd,
+          since: url.searchParams.get("since") ?? undefined,
+          until: url.searchParams.get("until") ?? undefined,
+          limit: limit + 1,
+          offset,
+        });
+        const hasMore = sessions.length > limit;
+        return sendJson(res, {
+          sessions: sessions.slice(0, limit),
+          page: { limit, offset, has_more: hasMore },
+        });
+      }
+
+      const v1SessionMatch = url.pathname.match(/^\/api\/v1\/sessions\/([^/]+)$/);
+      if (req.method === "GET" && v1SessionMatch) {
+        const id = decodeURIComponent(v1SessionMatch[1] ?? "");
+        const session = await sessionStore.find(id);
+        if (!session) return sendJson(res, { error: "session not found" }, 404);
+        const includeMessages = url.searchParams.get("messages") === "1";
+        return sendJson(
+          res,
+          includeMessages
+            ? { session, messages: await sessionStore.messages(session.id) }
+            : { session },
+        );
+      }
+
+      const v1ShareMatch = url.pathname.match(/^\/api\/v1\/sessions\/([^/]+)\/share$/);
+      if (req.method === "POST" && v1ShareMatch) {
+        return publishIndexedSession(
+          res,
+          publishStore,
+          sessionStore,
+          decodeURIComponent(v1ShareMatch[1] ?? ""),
+        );
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/v1/shares") {
+        const limit = clampLimit(numberParam(url.searchParams.get("limit")));
+        const offset = numberParam(url.searchParams.get("offset")) ?? 0;
+        const all = (await publishStore.list()).map(toSafeRecord);
+        return sendJson(res, {
+          shares: all.slice(offset, offset + limit),
+          total: all.length,
+        });
+      }
+
+      const shareDeleteMatch = url.pathname.match(/^\/api\/v1\/shares\/([^/]+)$/);
+      if (req.method === "DELETE" && shareDeleteMatch) {
+        const id = decodeURIComponent(shareDeleteMatch[1] ?? "");
+        const record = await publishStore.find(id);
+        if (!record) return sendJson(res, { error: `No record found for ${id}` }, 404);
+        if (!record.deleteCapability) return sendJson(res, { error: "Record has no delete capability" }, 409);
+        if (!record.workerUrl) return sendJson(res, { error: "Record has no workerUrl" }, 409);
+        const remote = await new PublishClient({ workerUrl: record.workerUrl }).unpublish(
+          record.remoteId,
+          record.deleteCapability,
+        );
+        const updated = await publishStore.update(record.localId, {
+          status: "unpublished",
+          url: remote.url ?? record.url,
+        });
+        return sendJson(res, { share: toSafeRecord(updated), remote });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/v1/shortcuts") {
+        return sendJson(res, { shortcuts: await publishStore.listShortcuts() });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/v1/shortcuts") {
+        const body = await readJson(req);
+        const label = typeof body.label === "string" ? body.label.trim() : "";
+        const targetUrl = typeof body.url === "string" ? body.url.trim() : "";
+        if (!label || !targetUrl) return sendJson(res, { error: "label and url are required" }, 400);
+        const icon = typeof body.icon === "string" ? body.icon : undefined;
+        const position = typeof body.position === "number" ? body.position : undefined;
+        const shortcut = await publishStore.addShortcut({
+          label,
+          url: targetUrl,
+          ...(icon !== undefined ? { icon } : {}),
+          ...(position !== undefined ? { position } : {}),
+        });
+        return sendJson(res, { shortcut }, 201);
+      }
+
+      const shortcutMatch = url.pathname.match(/^\/api\/v1\/shortcuts\/([^/]+)$/);
+      if (req.method === "PATCH" && shortcutMatch) {
+        const id = decodeURIComponent(shortcutMatch[1] ?? "");
+        const body = await readJson(req);
+        const patch: Parameters<StateStore["updateShortcut"]>[1] = {};
+        if (typeof body.label === "string") patch.label = body.label;
+        if (typeof body.url === "string") patch.url = body.url;
+        if (typeof body.icon === "string") patch.icon = body.icon;
+        if (typeof body.position === "number") patch.position = body.position;
+        const shortcut = await publishStore.updateShortcut(id, patch);
+        return sendJson(res, { shortcut });
+      }
+      if (req.method === "DELETE" && shortcutMatch) {
+        const id = decodeURIComponent(shortcutMatch[1] ?? "");
+        const ok = await publishStore.deleteShortcut(id);
+        if (!ok) return sendJson(res, { error: `No shortcut found for ${id}` }, 404);
+        return sendJson(res, { ok: true });
       }
 
       if (req.method === "POST" && url.pathname === "/api/unpublish") {

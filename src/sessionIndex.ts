@@ -63,6 +63,8 @@ export interface ManagedMessage {
 export interface ListSessionFilters {
 	query?: string;
 	project?: string;
+	/** Exact cwd match. Preferred over `project` for /api/v1 routes. */
+	cwd?: string;
 	agent?: string;
 	since?: string;
 	until?: string;
@@ -74,6 +76,19 @@ export interface SearchHit {
 	session: ManagedSession;
 	message: ManagedMessage;
 	snippet: string;
+}
+
+/**
+ * One project = one distinct cwd in the cxs index.
+ * `id` is base64url(cwd) so it's safe as a URL path segment.
+ */
+export interface ProjectInfo {
+	id: string;
+	name: string;
+	cwd: string;
+	sessionCount: number;
+	messageCount: number;
+	lastSessionAt: string | null;
 }
 
 export interface AnalyticsSummary {
@@ -158,6 +173,10 @@ export class SessionIndexStore {
 		return this.reader.analytics();
 	}
 
+	async listProjects(): Promise<ProjectInfo[]> {
+		return this.reader.listProjects();
+	}
+
 	close(): void {
 		this.reader.close();
 	}
@@ -230,3 +249,5 @@ function parseIndexedCount(text: string): number | undefined {
 export function defaultSessionRoots(): string[] {
 	return [];
 }
+
+export { encodeProjectId, decodeProjectId } from "./cxsReader.js";

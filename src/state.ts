@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { PublishRecord, SafePublishRecord, StateFile } from "./types.js";
+import type { PublishRecord, SafePublishRecord, Shortcut, StateFile } from "./types.js";
 
 const STATE_VERSION = 1 as const;
 
@@ -27,12 +27,22 @@ export class StateStore {
     try {
       const raw = await fs.readFile(this.file, "utf8");
       const parsed = JSON.parse(raw) as Partial<StateFile>;
-      if (parsed.version !== STATE_VERSION || !Array.isArray(parsed.records)) {
-        throw new Error(`Unsupported state file version: ${String(parsed.version)}`);
+      if (
+        parsed.version !== STATE_VERSION ||
+        !Array.isArray(parsed.records) ||
+        !Array.isArray(parsed.shortcuts)
+      ) {
+        throw new Error(`Unsupported state file: ${this.file}`);
       }
-      return { version: STATE_VERSION, records: parsed.records };
+      return {
+        version: STATE_VERSION,
+        records: parsed.records,
+        shortcuts: parsed.shortcuts,
+      };
     } catch (error) {
-      if (isNodeError(error) && error.code === "ENOENT") return { version: STATE_VERSION, records: [] };
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return { version: STATE_VERSION, records: [], shortcuts: [] };
+      }
       throw error;
     }
   }
@@ -82,6 +92,60 @@ export class StateStore {
       (record) => record.localId === idOrUrl || record.remoteId === idOrUrl || record.url === idOrUrl,
     );
   }
+
+  async listShortcuts(): Promise<Shortcut[]> {
+    const state = await this.load();
+    return [...state.shortcuts].sort((a, b) => a.position - b.position);
+  }
+
+  async addShortcut(input: {
+    label: string;
+    url: string;
+    icon?: string;
+    position?: number;
+  }): Promise<Shortcut> {
+    const now = new Date().toISOString();
+    const state = await this.load();
+    const maxPos = state.shortcuts.reduce((m, s) => Math.max(m, s.position), -1);
+    const sc: Shortcut = {
+      id: makeShortcutId(),
+      label: input.label,
+      url: input.url,
+      ...(input.icon ? { icon: input.icon } : {}),
+      position: input.position ?? maxPos + 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    state.shortcuts.push(sc);
+    await this.save(state);
+    return sc;
+  }
+
+  async updateShortcut(
+    id: string,
+    patch: Partial<Pick<Shortcut, "label" | "url" | "icon" | "position">>,
+  ): Promise<Shortcut> {
+    const state = await this.load();
+    const idx = state.shortcuts.findIndex((s) => s.id === id);
+    if (idx === -1) throw new Error(`No shortcut found for ${id}`);
+    const next: Shortcut = {
+      ...state.shortcuts[idx]!,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    state.shortcuts[idx] = next;
+    await this.save(state);
+    return next;
+  }
+
+  async deleteShortcut(id: string): Promise<boolean> {
+    const state = await this.load();
+    const before = state.shortcuts.length;
+    state.shortcuts = state.shortcuts.filter((s) => s.id !== id);
+    if (state.shortcuts.length === before) return false;
+    await this.save(state);
+    return true;
+  }
 }
 
 export function toSafeRecord(record: PublishRecord): SafePublishRecord {
@@ -91,6 +155,10 @@ export function toSafeRecord(record: PublishRecord): SafePublishRecord {
 
 export function makeLocalId(): string {
   return `loc_${crypto.randomBytes(8).toString("hex")}`;
+}
+
+export function makeShortcutId(): string {
+  return `sc_${crypto.randomBytes(6).toString("hex")}`;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

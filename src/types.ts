@@ -83,4 +83,20 @@ export interface SafePublishRecord extends Omit<PublishRecord, "deleteCapability
 export interface StateFile {
   version: 1;
   records: PublishRecord[];
+  shortcuts: Shortcut[];
+}
+
+/**
+ * A user-pinned shortcut surfaced in the dashboard sidebar.
+ * `url` may be a relative dashboard path (e.g. `/api/v1/projects/:id/sessions`)
+ * or any external URL.
+ */
+export interface Shortcut {
+  id: string;
+  label: string;
+  url: string;
+  icon?: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
 }
