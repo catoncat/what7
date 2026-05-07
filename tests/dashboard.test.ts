@@ -6,10 +6,8 @@ import path from "node:path";
 import { startDashboard } from "../src/dashboard.js";
 import { StateStore } from "../src/state.js";
 import { listen, close } from "../src/server.js";
-
-// NOTE: tests that depended on `SessionIndexStore.save()` (mocking JSONL session
-// state) were removed when sessionIndex.ts switched to a read-only cxs SQLite
-// backend. They will be reintroduced in M2 with a fixture cxs sqlite db.
+import { encodeProjectId } from "../src/cxsReader.js";
+import { buildCxsFixture, sampleSessions } from "./helpers/cxsFixture.js";
 
 describe("dashboard", () => {
 	it("lists records without delete capability and unpublishes through the local backend", async () => {
@@ -61,5 +59,48 @@ describe("dashboard", () => {
 
 		await dashboard.close();
 		await close(worker);
+	});
+
+	it("serves cxs sessions through /api/sessions, /api/v1/projects, /api/v1/sessions/:id", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-cxs-"));
+		const { dbPath } = buildCxsFixture(dir, sampleSessions());
+
+		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
+
+		const sessionsRes = (await (await fetch(new URL("/api/sessions", dashboard.url))).json()) as {
+			sessions: Array<{ id: string; project: string }>;
+			page: { limit: number; offset: number; has_more: boolean };
+		};
+		expect(sessionsRes.sessions.map((s) => s.id)).toEqual(["sess_a", "sess_b", "sess_c"]);
+		expect(sessionsRes.page.has_more).toBe(false);
+
+		const projectsRes = (await (await fetch(new URL("/api/v1/projects", dashboard.url))).json()) as {
+			projects: Array<{ id: string; name: string; sessionCount: number }>;
+		};
+		const byName = Object.fromEntries(projectsRes.projects.map((p) => [p.name, p]));
+		expect(byName.foo?.sessionCount).toBe(2);
+		expect(byName.bar?.sessionCount).toBe(1);
+		expect(byName.foo?.id).toBe(encodeProjectId("/Users/test/repos/foo"));
+
+		const fooId = byName.foo!.id;
+		const projectSessionsRes = (await (
+			await fetch(new URL(`/api/v1/projects/${fooId}/sessions`, dashboard.url))
+		).json()) as { sessions: Array<{ id: string }> };
+		expect(projectSessionsRes.sessions.map((s) => s.id).sort()).toEqual(["sess_a", "sess_b"]);
+
+		const sessionWithMessages = (await (
+			await fetch(new URL("/api/v1/sessions/sess_a?messages=1", dashboard.url))
+		).json()) as {
+			session: { id: string; project: string };
+			messages: Array<{ order: number; role: string }>;
+		};
+		expect(sessionWithMessages.session.id).toBe("sess_a");
+		expect(sessionWithMessages.session.project).toBe("foo");
+		expect(sessionWithMessages.messages.map((m) => m.order)).toEqual([0, 1, 2, 3]);
+
+		const missing = await fetch(new URL("/api/v1/sessions/missing", dashboard.url));
+		expect(missing.status).toBe(404);
+
+		await dashboard.close();
 	});
 });

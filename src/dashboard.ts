@@ -15,6 +15,11 @@ export interface DashboardOptions {
   stateDir?: string;
   port?: number;
   open?: boolean;
+  /**
+   * Override the cxs SQLite path. Forwarded to SessionIndexStore. Used by
+   * tests to inject a fixture cxs db.
+   */
+  dbPath?: string;
 }
 
 export interface DashboardHandle {
@@ -25,7 +30,7 @@ export interface DashboardHandle {
 
 export async function startDashboard(options: DashboardOptions = {}): Promise<DashboardHandle> {
   const publishStore = new StateStore(options.stateDir);
-  const sessionStore = new SessionIndexStore(options.stateDir);
+  const sessionStore = new SessionIndexStore(options.stateDir, options.dbPath);
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
