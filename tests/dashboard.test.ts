@@ -10,7 +10,7 @@ import { encodeProjectId } from "../src/cxsReader.js";
 import { buildCxsFixture, sampleSessions } from "./helpers/cxsFixture.js";
 
 describe("dashboard", () => {
-	it("lists records without delete capability and unpublishes through the local backend", async () => {
+	it("lists shares without delete capability and unpublishes through DELETE /api/v1/shares/:id", async () => {
 		let unpublishToken = "";
 		const worker = http.createServer((req, res) => {
 			if (req.method === "POST" && req.url === "/api/share/remote_dash/unpublish") {
@@ -28,8 +28,6 @@ describe("dashboard", () => {
 
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-"));
 		const store = new StateStore(dir);
-		const htmlPath = path.join(dir, "record.html");
-		await fs.writeFile(htmlPath, "<h1>local html</h1>");
 		const record = await store.add({
 			remoteId: "remote_dash",
 			url: "http://127.0.0.1/s/remote_dash",
@@ -37,21 +35,20 @@ describe("dashboard", () => {
 			title: "Dashboard Session",
 			deleteCapability: "dash-delete-token",
 			workerUrl: `http://127.0.0.1:${workerAddress.port}`,
-			htmlPath,
 		});
 
 		const dashboard = await startDashboard({ stateDir: dir, port: 0, open: false });
-		const listed = (await (await fetch(new URL("/api/records", dashboard.url))).json()) as { records: Array<Record<string, unknown>> };
-		expect(JSON.stringify(listed)).not.toContain("dash-delete-token");
-		expect(listed.records[0]?.hasDeleteCapability).toBe(true);
-		const localHtml = await fetch(new URL(`/local/${record.localId}`, dashboard.url));
-		expect(localHtml.status).toBe(200);
-		expect(await localHtml.text()).toContain("local html");
 
-		const response = await fetch(new URL("/api/unpublish", dashboard.url), {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ id: record.localId }),
+		const listed = (await (await fetch(new URL("/api/v1/shares", dashboard.url))).json()) as {
+			shares: Array<Record<string, unknown>>;
+			total: number;
+		};
+		expect(JSON.stringify(listed)).not.toContain("dash-delete-token");
+		expect(listed.shares[0]?.hasDeleteCapability).toBe(true);
+		expect(listed.total).toBe(1);
+
+		const response = await fetch(new URL(`/api/v1/shares/${record.localId}`, dashboard.url), {
+			method: "DELETE",
 		});
 		expect(response.status).toBe(200);
 		expect(unpublishToken).toBe("dash-delete-token");
@@ -61,13 +58,13 @@ describe("dashboard", () => {
 		await close(worker);
 	});
 
-	it("serves cxs sessions through /api/sessions, /api/v1/projects, /api/v1/sessions/:id", async () => {
+	it("serves cxs sessions through /api/v1/sessions, /api/v1/projects, /api/v1/sessions/:id", async () => {
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-cxs-"));
 		const { dbPath } = buildCxsFixture(dir, sampleSessions());
 
 		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
 
-		const sessionsRes = (await (await fetch(new URL("/api/sessions", dashboard.url))).json()) as {
+		const sessionsRes = (await (await fetch(new URL("/api/v1/sessions", dashboard.url))).json()) as {
 			sessions: Array<{ id: string; project: string }>;
 			page: { limit: number; offset: number; has_more: boolean };
 		};
