@@ -3,41 +3,43 @@ import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import NavSidebar from "@/components/NavSidebar.vue";
 import SessionList from "@/components/SessionList.vue";
-import { sessions } from "@/data/mock";
+import { fetchProjectSessions, fetchSessions } from "@/api/client";
 import { APP_SHELL_KEY, type AppShell } from "@/shell";
 import type { Session } from "@/types";
 
 const route = useRoute();
 
 interface Filter {
-  kind: "scope" | "project" | "agent";
-  scope?: string;
+  kind: "inbox" | "project";
   slug?: string;
 }
 
 const filter = computed<Filter>(() => {
-  const meta = route.meta as { kind?: string; scope?: string };
+  const meta = route.meta as { kind?: string };
   if (meta?.kind === "project") return { kind: "project", slug: String(route.params.slug ?? "") };
-  if (meta?.kind === "agent") return { kind: "agent", slug: String(route.params.slug ?? "") };
-  return { kind: "scope", scope: meta?.scope ?? "inbox" };
+  return { kind: "inbox" };
 });
 
-const filteredSessions = computed<Session[]>(() => {
-  const f = filter.value;
-  if (f.kind === "project") return sessions.filter((s) => s.project === f.slug);
-  if (f.kind === "agent") return sessions.filter((s) => s.agent === f.slug);
-  if (f.scope === "pinned") return sessions.filter((s) => s.pinned);
-  if (f.scope === "shared") return sessions.filter((s) => s.shared);
-  if (f.scope === "drafts") return sessions.filter((s) => s.draft);
-  return sessions;
-});
+const sessions = ref<Session[]>([]);
+const loading = ref(false);
 
-const SCOPE_TITLES: Record<string, string> = { inbox: "Recent", pinned: "Pinned", shared: "Shared", drafts: "Drafts" };
+async function loadSessions(f: Filter) {
+  loading.value = true;
+  const result = f.kind === "project" && f.slug
+    ? await fetchProjectSessions(f.slug, { limit: 100 })
+    : await fetchSessions({ limit: 100 });
+  sessions.value = result.sessions;
+  loading.value = false;
+}
+
+watch(filter, (f) => loadSessions(f), { immediate: true });
+
 const listTitle = computed<string>(() => {
-  const f = filter.value;
-  if (f.kind === "project") return `Project · ${f.slug}`;
-  if (f.kind === "agent") return `Agent · ${f.slug}`;
-  return SCOPE_TITLES[f.scope ?? "inbox"] ?? "Recent";
+  if (filter.value.kind === "project") {
+    const first = sessions.value[0];
+    return first ? `Project · ${first.project}` : `Project`;
+  }
+  return "Recent";
 });
 
 const activeId = computed(() => {
@@ -48,8 +50,7 @@ const activeId = computed(() => {
 const buildLink = (sessionId: string): string => {
   const f = filter.value;
   if (f.kind === "project") return `/projects/${f.slug}/${sessionId}`;
-  if (f.kind === "agent") return `/agents/${f.slug}/${sessionId}`;
-  return `/${f.scope}/${sessionId}`;
+  return `/inbox/${sessionId}`;
 };
 
 // Responsive shell state
@@ -57,20 +58,17 @@ const isMobile = ref(false);
 const navOpen = ref(false);
 
 let mql: MediaQueryList | null = null;
-const syncMobile = (matches: boolean) => { isMobile.value = matches; };
+let mqlHandler: ((e: MediaQueryListEvent) => void) | null = null;
 
 onMounted(() => {
   if (typeof window === "undefined") return;
   mql = window.matchMedia("(max-width: 720px)");
-  syncMobile(mql.matches);
-  const handler = (e: MediaQueryListEvent) => syncMobile(e.matches);
-  mql.addEventListener("change", handler);
-  (mql as unknown as { __handler?: (e: MediaQueryListEvent) => void }).__handler = handler;
+  isMobile.value = mql.matches;
+  mqlHandler = (e: MediaQueryListEvent) => { isMobile.value = e.matches; };
+  mql.addEventListener("change", mqlHandler);
 });
 onUnmounted(() => {
-  if (!mql) return;
-  const handler = (mql as unknown as { __handler?: (e: MediaQueryListEvent) => void }).__handler;
-  if (handler) mql.removeEventListener("change", handler);
+  if (mql && mqlHandler) mql.removeEventListener("change", mqlHandler);
 });
 
 watch(() => route.fullPath, () => { navOpen.value = false; });
@@ -92,8 +90,9 @@ provide(APP_SHELL_KEY, shell);
     <NavSidebar />
     <SessionList
       :title="listTitle"
-      :sessions="filteredSessions"
+      :sessions="sessions"
       :active-id="activeId"
+      :loading="loading"
       :build-link="buildLink"
     />
     <main class="reading">
@@ -148,9 +147,6 @@ provide(APP_SHELL_KEY, shell);
 </style>
 
 <style>
-/* Global (non-scoped) responsive overrides for child component roots.
-   Vue 3 scoped styles cannot reach child component roots, so drawer
-   behavior on mobile is expressed here. */
 @media (max-width: 720px) {
   .app .nav {
     position: fixed;

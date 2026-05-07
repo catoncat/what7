@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import { RouterLink } from "vue-router";
-import { agents } from "@/data/mock";
 import { APP_SHELL_KEY } from "@/shell";
-import type { AgentDef, Session } from "@/types";
+import type { Session } from "@/types";
 
 const shell = inject(APP_SHELL_KEY);
 
@@ -11,10 +10,16 @@ const props = defineProps<{
   title: string;
   sessions: Session[];
   activeId: string | undefined;
+  loading: boolean;
   buildLink: (id: string) => string;
 }>();
 
 interface Bucket { label: string; items: Session[]; }
+
+function sortKey(s: Session): number {
+  const t = s.endedAt ?? s.startedAt ?? s.updatedAt;
+  return t ? new Date(t).getTime() : 0;
+}
 
 const buckets = computed<Bucket[]>(() => {
   const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
@@ -25,7 +30,7 @@ const buckets = computed<Bucket[]>(() => {
   const thisWeek: Session[] = [];
   const earlier: Session[] = [];
   for (const s of props.sessions) {
-    const t = new Date(s.startedAt).getTime();
+    const t = sortKey(s);
     if (t >= startOfToday.getTime()) today.push(s);
     else if (t >= startOfYesterday.getTime()) yesterday.push(s);
     else if (t >= startOfWeek.getTime()) thisWeek.push(s);
@@ -40,11 +45,8 @@ const buckets = computed<Bucket[]>(() => {
   return groups.filter((b) => b.items.length);
 });
 
-const agentMap: Record<string, AgentDef> = Object.fromEntries(agents.map((a) => [a.slug, a]));
-const fallbackAgent: AgentDef = { slug: "cx", name: "agent", glyph: "??", fg: "#a4a7ad", bg: "#1c1d22" };
-function ag(slug: string): AgentDef { return agentMap[slug] ?? fallbackAgent; }
-
-function relativeTime(iso: string): string {
+function relativeTime(iso: string | undefined): string {
+  if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.round(diff / 60000);
   if (m < 1) return "now";
@@ -56,7 +58,13 @@ function relativeTime(iso: string): string {
 }
 
 function metaLine(s: Session): string {
-  return `${s.project} · ${s.messageCount} msgs · ${s.toolCount} tools`;
+  const parts: string[] = [s.project, `${s.messageCount} msgs`];
+  if (s.model) parts.push(s.model);
+  return parts.join(" · ");
+}
+
+function agentGlyph(s: Session): string {
+  return s.agent === "codex" ? "cx" : s.agent;
 }
 </script>
 
@@ -72,7 +80,8 @@ function metaLine(s: Session): string {
       <h2 v-text="title"></h2>
       <span class="count" v-text="sessions.length"></span>
     </header>
-    <div v-if="!sessions.length" class="empty">No sessions in this view.</div>
+    <div v-if="loading" class="empty">Loading…</div>
+    <div v-else-if="!sessions.length" class="empty">No sessions in this view.</div>
     <div v-for="b in buckets" :key="b.label" class="bucket">
       <h3 v-text="b.label"></h3>
       <RouterLink
@@ -82,17 +91,14 @@ function metaLine(s: Session): string {
         class="row"
         :class="{ active: s.id === activeId }"
       >
-        <span class="glyph" :style="{ color: ag(s.agent).fg, background: ag(s.agent).bg }" v-text="ag(s.agent).glyph"></span>
+        <span class="glyph" v-text="agentGlyph(s)"></span>
         <div class="body">
           <div class="title" v-text="s.title"></div>
           <div class="meta">
             <span v-text="metaLine(s)"></span>
-            <span v-if="s.shared" class="tag tag-shared">shared</span>
-            <span v-if="s.draft" class="tag tag-draft">draft</span>
-            <span v-if="s.pinned" class="tag tag-pinned">★</span>
           </div>
         </div>
-        <span class="time" v-text="relativeTime(s.startedAt)"></span>
+        <span class="time" v-text="relativeTime(s.endedAt ?? s.startedAt)"></span>
       </RouterLink>
     </div>
   </section>
@@ -156,6 +162,7 @@ function metaLine(s: Session): string {
   display: grid; place-items: center; flex: 0 0 auto;
   font-family: var(--font-mono); font-size: 10px; font-weight: 600;
   margin-top: 1px;
+  background: var(--surface-2); color: var(--fg-2);
 }
 .row .body { flex: 1; min-width: 0; }
 .row .title {
@@ -170,13 +177,6 @@ function metaLine(s: Session): string {
   margin-top: 3px;
   align-items: center;
 }
-.row .meta .tag {
-  font-family: var(--font-sans); font-size: 9.5px;
-  padding: 0 5px; border-radius: 3px; line-height: 14px;
-}
-.tag-shared { color: var(--green); background: var(--tag-shared-bg); }
-.tag-draft { color: var(--amber); background: var(--tag-draft-bg); }
-.tag-pinned { color: var(--brand); background: var(--brand-soft); }
 .row .time {
   color: var(--fg-3);
   font-family: var(--font-mono); font-size: 10.5px;

@@ -109,6 +109,23 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
         return sendJson(res, { projects: await sessionStore.listProjects() });
       }
 
+      if (req.method === "GET" && url.pathname === "/api/v1/sessions") {
+        const limit = clampLimit(numberParam(url.searchParams.get("limit")));
+        const offset = numberParam(url.searchParams.get("offset")) ?? 0;
+        const sessions = await sessionStore.list({
+          query: url.searchParams.get("q") ?? undefined,
+          since: url.searchParams.get("since") ?? undefined,
+          until: url.searchParams.get("until") ?? undefined,
+          limit: limit + 1,
+          offset,
+        });
+        const hasMore = sessions.length > limit;
+        return sendJson(res, {
+          sessions: sessions.slice(0, limit),
+          page: { limit, offset, has_more: hasMore },
+        });
+      }
+
       const projectSessionsMatch = url.pathname.match(/^\/api\/v1\/projects\/([^/]+)\/sessions$/);
       if (req.method === "GET" && projectSessionsMatch) {
         const projectId = decodeURIComponent(projectSessionsMatch[1] ?? "");

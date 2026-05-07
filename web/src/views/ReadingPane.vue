@@ -1,35 +1,71 @@
 <script setup lang="ts">
-import { computed, inject } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { detail } from "@/data/mock";
+import { fetchSessionDetail } from "@/api/client";
 import { APP_SHELL_KEY } from "@/shell";
+import type { MessageBlock, Session } from "@/types";
 
 const shell = inject(APP_SHELL_KEY);
 const route = useRoute();
 
+const props = defineProps<{ id: string }>();
+
+const session = ref<Session | null>(null);
+const messages = ref<MessageBlock[]>([]);
+const loading = ref(false);
+const error = ref<string | null>(null);
+
+async function load(id: string) {
+  loading.value = true;
+  error.value = null;
+  session.value = null;
+  messages.value = [];
+  try {
+    const data = await fetchSessionDetail(id);
+    session.value = data.session;
+    messages.value = data.messages ?? [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(() => props.id, (id) => load(id), { immediate: true });
+
 const listPath = computed<string>(() => {
-  const meta = route.meta as { kind?: string; scope?: string };
+  const meta = route.meta as { kind?: string };
   const slug = String(route.params.slug ?? "");
   if (meta?.kind === "project") return `/projects/${slug}`;
-  if (meta?.kind === "agent") return `/agents/${slug}`;
-  return `/${meta?.scope ?? "inbox"}`;
+  return "/inbox";
 });
 
-const props = defineProps<{ id: string }>();
-const sessionDetail = computed(() => detail(props.id));
-
-function formatTime(iso: string): string {
+function formatTime(iso: string | undefined): string {
+  if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
-  return `${s.id} · ${s.project} · ${s.agent} · ${s.messageCount} msgs · ${s.toolCount} tools · ${formatTime(s.startedAt)}`;
+function headLine(s: Session): string {
+  const time = formatTime(s.endedAt ?? s.startedAt);
+  const parts: string[] = [s.id.slice(0, 8), s.project, s.agent, `${s.messageCount} msgs`];
+  if (s.model) parts.push(s.model);
+  if (time) parts.push(time);
+  return parts.join(" · ");
+}
+
+function msgRoleLabel(m: MessageBlock): string {
+  if (m.role) return m.role;
+  return m.kind;
+}
+
+function msgRoleClass(m: MessageBlock): string {
+  return `msg-${m.role ?? m.kind}`;
 }
 </script>
 
 <template>
-  <article v-if="sessionDetail" class="reader">
+  <article v-if="session" class="reader">
     <header class="head">
       <div class="title-row">
         <RouterLink
@@ -38,31 +74,33 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
           :to="listPath"
           aria-label="Back to list"
         >‹</RouterLink>
-        <h1 v-text="sessionDetail.title"></h1>
+        <h1 v-text="session.title"></h1>
         <div class="actions">
           <button class="ghost">Copy link</button>
           <button class="primary">Share</button>
         </div>
       </div>
       <div class="meta">
-        <span v-text="headLine(sessionDetail)"></span>
-        <span v-if="sessionDetail.shared" class="tag tag-shared">shared</span>
-        <span v-if="sessionDetail.draft" class="tag tag-draft">draft</span>
-        <span v-if="sessionDetail.pinned" class="tag tag-pinned">pinned</span>
+        <span v-text="headLine(session)"></span>
       </div>
     </header>
     <div class="body">
-      <div v-for="m in sessionDetail.messages" :key="m.id" :class="['msg', `msg-${m.role}`]">
+      <div v-for="m in messages" :key="m.id" :class="['msg', msgRoleClass(m)]">
         <div class="role">
-          <span v-text="m.role"></span>
-          <span v-if="m.meta" class="tool-name" v-text="m.meta"></span>
+          <span v-text="msgRoleLabel(m)"></span>
+          <span v-if="m.toolName" class="tool-name" v-text="m.toolName"></span>
         </div>
         <div class="content" v-text="m.content"></div>
       </div>
+      <div v-if="!messages.length" class="empty">No messages.</div>
     </div>
   </article>
+  <div v-else-if="loading" class="missing">Loading…</div>
+  <div v-else-if="error" class="missing">
+    <code v-text="error"></code>
+  </div>
   <div v-else class="missing">
-    Session <code v-text="id"></code> not found in mock data.
+    Session <code v-text="props.id"></code> not found.
   </div>
 </template>
 
@@ -115,13 +153,6 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   font-family: var(--font-mono); font-size: 10.5px;
   color: var(--fg-3);
 }
-.meta .tag {
-  font-family: var(--font-sans); font-size: 9.5px;
-  padding: 0 5px; border-radius: 3px; line-height: 14px;
-}
-.tag-shared { color: var(--green); background: var(--tag-shared-bg); }
-.tag-draft { color: var(--amber); background: var(--tag-draft-bg); }
-.tag-pinned { color: var(--brand); background: var(--brand-soft); }
 
 .body {
   overflow-y: auto;
@@ -129,6 +160,7 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   display: flex; flex-direction: column; gap: 22px;
   max-width: 880px;
 }
+.body .empty { color: var(--fg-3); font-family: var(--font-mono); font-size: 12px; }
 .msg .role {
   display: flex; gap: 8px;
   font-family: var(--font-mono); font-size: 10.5px;
@@ -141,7 +173,9 @@ function headLine(s: NonNullable<ReturnType<typeof detail>>): string {
   font-size: 13.5px; line-height: 1.65;
   color: var(--fg);
 }
-.msg-tool .content {
+.msg-tool .content,
+.msg-tool_call .content,
+.msg-tool_result .content {
   font-family: var(--font-mono); font-size: 12px;
   background: var(--surface);
   border: 1px solid var(--line);

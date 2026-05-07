@@ -1,44 +1,76 @@
-export type AgentSlug = "cx" | "cl" | "gp";
-export type Scope = "inbox" | "pinned" | "shared" | "drafts";
+// what7 frontend DTOs — mirror the server's /api/v1 surface
+// (see src/sessionIndex.ts ManagedSession / ManagedMessage / ProjectInfo).
+
+export type AgentSlug = "codex";
+
+export type MessageRole = "user" | "assistant" | "system" | "tool" | "unknown";
+
+export type MessageKind =
+  | "message"
+  | "tool_call"
+  | "tool_result"
+  | "reasoning"
+  | "event"
+  | "metadata"
+  | "error";
 
 export interface Project {
-  slug: string;
-  name: string;
-  color: string;
-}
-
-export interface AgentDef {
-  slug: AgentSlug;
-  name: string;
-  glyph: string;
-  fg: string;
-  bg: string;
+  id: string;          // base64url(cwd)
+  name: string;        // basename(cwd)
+  cwd: string;
+  sessionCount: number;
+  messageCount: number;
+  lastSessionAt: string | null;
 }
 
 export interface Session {
   id: string;
-  title: string;
   agent: AgentSlug;
-  project: string;
+  title: string;
+  project: string;     // basename(cwd)
+  sourcePath: string;
+  startedAt?: string;
+  endedAt?: string;
+  updatedAt: string;
+  model?: string;
+  lineCount: number;
   messageCount: number;
-  toolCount: number;
-  startedAt: string;
-  pinned?: boolean;
-  shared?: boolean;
-  draft?: boolean;
-  preview?: string;
+  userMessageCount: number;
+  assistantMessageCount: number;
+  firstMessage: string;
 }
-
-export type MessageRole = "user" | "assistant" | "tool" | "reasoning";
 
 export interface MessageBlock {
   id: string;
-  role: MessageRole;
+  sessionId: string;
+  order: number;
+  line: number;
+  kind: MessageKind;
+  role?: MessageRole;
+  timestamp?: string;
+  title: string;
   content: string;
-  meta?: string;
-  collapsed?: boolean;
+  toolName?: string;
+  callId?: string;
 }
 
-export interface SessionDetail extends Session {
+export interface SessionDetail {
+  session: Session;
   messages: MessageBlock[];
+}
+
+export interface Shortcut {
+  id: string;
+  label: string;
+  url: string;
+  icon?: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PageInfo {
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }

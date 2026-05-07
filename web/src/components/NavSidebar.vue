@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, watchEffect } from "vue";
 import { RouterLink } from "vue-router";
-import { agents, projects, sessions } from "@/data/mock";
+import { fetchProjects, fetchShortcuts } from "@/api/client";
 import { APP_SHELL_KEY } from "@/shell";
+import type { Project, Shortcut } from "@/types";
 
 const shell = inject(APP_SHELL_KEY);
 
@@ -10,9 +11,18 @@ type Theme = "auto" | "light" | "dark";
 const THEME_KEY = "what7-theme";
 const theme = ref<Theme>("auto");
 
-onMounted(() => {
+const projects = ref<Project[]>([]);
+const shortcuts = ref<Shortcut[]>([]);
+const totalSessions = computed(() =>
+  projects.value.reduce((sum, p) => sum + p.sessionCount, 0),
+);
+
+onMounted(async () => {
   const saved = localStorage.getItem(THEME_KEY) as Theme | null;
   if (saved === "auto" || saved === "light" || saved === "dark") theme.value = saved;
+  const [proj, sc] = await Promise.all([fetchProjects(), fetchShortcuts()]);
+  projects.value = proj;
+  shortcuts.value = sc;
 });
 
 watchEffect(() => {
@@ -20,33 +30,19 @@ watchEffect(() => {
   const root = document.documentElement;
   if (theme.value === "auto") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", theme.value);
-  try { localStorage.setItem(THEME_KEY, theme.value); } catch { /* ignore */ }
+  localStorage.setItem(THEME_KEY, theme.value);
 });
 
-const themeIcon = computed(() => (theme.value === "light" ? "☀" : theme.value === "dark" ? "☾" : "◐"));
-const themeLabel = computed(() => (theme.value === "auto" ? "Auto" : theme.value === "light" ? "Light" : "Dark"));
+const themeIcon = computed(() =>
+  theme.value === "light" ? "☀" : theme.value === "dark" ? "☾" : "◐",
+);
+const themeLabel = computed(() =>
+  theme.value === "auto" ? "Auto" : theme.value === "light" ? "Light" : "Dark",
+);
 
 function cycleTheme() {
   theme.value = theme.value === "auto" ? "light" : theme.value === "light" ? "dark" : "auto";
 }
-
-const counts = computed(() => ({
-  inbox: sessions.length,
-  pinned: sessions.filter((s) => s.pinned).length,
-  shared: sessions.filter((s) => s.shared).length,
-  drafts: sessions.filter((s) => s.draft).length,
-}));
-
-const projectCounts = computed(() => {
-  const map: Record<string, number> = {};
-  for (const s of sessions) map[s.project] = (map[s.project] ?? 0) + 1;
-  return map;
-});
-const agentCounts = computed(() => {
-  const map: Record<string, number> = {};
-  for (const s of sessions) map[s.agent] = (map[s.agent] ?? 0) + 1;
-  return map;
-});
 </script>
 
 <template>
@@ -54,7 +50,7 @@ const agentCounts = computed(() => {
     <header class="brand">
       <span class="logo">⌘</span>
       <span class="name">what7</span>
-      <span class="counter" v-text="sessions.length"></span>
+      <span class="counter" v-text="totalSessions"></span>
       <button
         v-if="shell?.isMobile.value"
         class="close"
@@ -68,48 +64,35 @@ const agentCounts = computed(() => {
     </div>
     <nav class="primary">
       <RouterLink :to="{ name: 'inbox' }">
-        <span>Recent</span><span class="meta" v-text="counts.inbox"></span>
-      </RouterLink>
-      <RouterLink :to="{ name: 'pinned' }">
-        <span>Pinned</span><span class="meta" v-text="counts.pinned"></span>
-      </RouterLink>
-      <RouterLink :to="{ name: 'shared' }">
-        <span>Shared</span><span class="meta" v-text="counts.shared"></span>
-      </RouterLink>
-      <RouterLink :to="{ name: 'drafts' }">
-        <span>Drafts</span><span class="meta" v-text="counts.drafts"></span>
+        <span>Recent</span><span class="meta" v-text="totalSessions"></span>
       </RouterLink>
     </nav>
     <section class="group">
       <h3>Projects</h3>
       <RouterLink
         v-for="p in projects"
-        :key="p.slug"
-        :to="{ name: 'project', params: { slug: p.slug } }"
+        :key="p.id"
+        :to="{ name: 'project', params: { slug: p.id } }"
+        :title="p.cwd"
       >
-        <span class="dot" :style="{ background: p.color }"></span>
+        <span class="dot"></span>
         <span class="label" v-text="p.name"></span>
-        <span class="meta" v-text="projectCounts[p.slug] ?? 0"></span>
+        <span class="meta" v-text="p.sessionCount"></span>
       </RouterLink>
+      <div v-if="!projects.length" class="hint">No indexed projects yet.</div>
     </section>
-    <section class="group">
-      <h3>Agents</h3>
-      <RouterLink
-        v-for="a in agents"
-        :key="a.slug"
-        :to="{ name: 'agent', params: { slug: a.slug } }"
-      >
-        <span class="glyph" :style="{ color: a.fg, background: a.bg }" v-text="a.glyph"></span>
-        <span class="label" v-text="a.name"></span>
-        <span class="meta" v-text="agentCounts[a.slug] ?? 0"></span>
-      </RouterLink>
+    <section v-if="shortcuts.length" class="group">
+      <h3>Shortcuts</h3>
+      <a v-for="s in shortcuts" :key="s.id" :href="s.url" class="shortcut">
+        <span class="glyph" v-text="s.icon ?? '→'"></span>
+        <span class="label" v-text="s.label"></span>
+      </a>
     </section>
     <footer class="foot">
       <button class="theme" @click="cycleTheme" :title="`Theme: ${themeLabel}`">
         <span class="theme-icon" v-text="themeIcon"></span>
         <span v-text="themeLabel"></span>
       </button>
-      <button>Sync now</button>
     </footer>
   </aside>
 </template>
@@ -171,16 +154,25 @@ const agentCounts = computed(() => {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--fg-3); font-weight: 500; margin: 6px 8px 6px;
 }
-.group .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.group .dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  background: var(--accent);
+}
 .group .glyph {
   width: 18px; height: 18px; border-radius: 4px;
   display: grid; place-items: center;
   font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  background: var(--surface-2); color: var(--fg-2);
 }
-.group .label { flex: 1; }
+.group .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group .hint { color: var(--fg-3); padding: 4px 8px; font-size: 11.5px; }
+.shortcut {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: var(--r-sm); color: var(--fg-2);
+}
+.shortcut:hover { background: var(--surface-2); color: var(--fg); }
 
-.foot { margin-top: auto; padding: 8px; border-top: 1px solid var(--line); }
-.foot { display: flex; flex-direction: column; gap: 6px; }
+.foot { margin-top: auto; padding: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
 .foot button {
   width: 100%; padding: 6px;
   background: var(--surface-2); border: 1px solid var(--line);
