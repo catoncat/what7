@@ -54,7 +54,6 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
         const offset = numberParam(url.searchParams.get("offset")) ?? 0;
         const sessions = await sessionStore.list({
           query: url.searchParams.get("q") ?? undefined,
-          project: url.searchParams.get("project") ?? undefined,
           since: url.searchParams.get("since") ?? undefined,
           until: url.searchParams.get("until") ?? undefined,
           limit: limit + 1,
@@ -69,7 +68,6 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
         const limit = clampLimit(numberParam(url.searchParams.get("limit")));
         const offset = numberParam(url.searchParams.get("offset")) ?? 0;
         const hits = await sessionStore.search(q, {
-          project: url.searchParams.get("project") ?? undefined,
           since: url.searchParams.get("since") ?? undefined,
           until: url.searchParams.get("until") ?? undefined,
           limit: limit + 1,
@@ -345,7 +343,7 @@ function dashboardHtml(): string {
     <div class="top">
       <p class="eyebrow">local session workbench</p><h1>what7</h1>
       <div class="toolbar"><input id="q" placeholder="Search sessions/messages…"><button id="sync">Sync</button></div>
-      <div class="filters"><input id="project" placeholder="Project filter (optional)"><input id="since" type="date" title="Since"><input id="until" type="date" title="Until"></div>
+      <div class="filters"><input id="since" type="date" title="Since"><input id="until" type="date" title="Until"></div>
       <p id="msg" class="muted">Recent sessions load first. Stats are on demand.</p>
     </div>
     <div class="stats" id="stats"><div class="stats-note">Stats on demand so large corpora do not block first paint.</div><button id="loadStats">Load stats</button></div>
@@ -365,7 +363,7 @@ const PAGE=30;
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function j(url, opts){ const r=await fetch(url, opts); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||r.status); return d; }
-function filters(){ const p=new URLSearchParams(); const q=$('#q').value.trim(); const project=$('#project').value.trim(); const since=$('#since').value; const until=$('#until').value; if(q)p.set('q',q); if(project)p.set('project',project); if(since)p.set('since',since); if(until)p.set('until',until); return p; }
+function filters(){ const p=new URLSearchParams(); const q=$('#q').value.trim(); const since=$('#since').value; const until=$('#until').value; if(q)p.set('q',q); if(since)p.set('since',since); if(until)p.set('until',until); return p; }
 function localUrl(extra){ if(!active)return ''; return '/api/sessions/'+encodeURIComponent(active.id)+'/html'+(extra||''); }
 function renderSessions(){ $('#sessions').innerHTML=sessions.map(s=>'<button class="session '+(active?.id===s.id?'active':'')+'" data-id="'+esc(s.id)+'"><div class="session-title">'+esc(s.title||s.firstMessage||s.id)+'</div><div class="session-meta">'+esc(s.project)+' · '+esc(s.messageCount)+' msgs · '+esc(s.startedAt||s.updatedAt||'')+'</div></button>').join('')||'<p class="muted" style="padding:14px">No indexed sessions. Click Sync.</p>'; $('#moreSessions').style.display=sessionHasMore?'block':'none'; }
 async function loadSessions(opts){ const reset=opts&&opts.reset; const offset=reset?0:sessions.length; const p=filters(); p.set('limit',String(PAGE)); p.set('offset',String(offset)); const data=await j('/api/sessions?'+p.toString()); sessions=reset?(data.sessions||[]):sessions.concat(data.sessions||[]); sessionHasMore=Boolean(data.page&&data.page.has_more); renderSessions(); }
@@ -386,7 +384,7 @@ $('#share').onclick=async()=>{ if(!active)return; $('#msg').textContent='Publish
 $('#copyLocal').onclick=async()=>{ if(!active)return; const url=new URL(localUrl(''), location.href).toString(); try{await navigator.clipboard.writeText(url); $('#msg').textContent='Copied '+url;}catch{ $('#msg').textContent=url; } };
 $('#openLocal').onclick=()=>{ if(active) window.open(localUrl(''),'_blank'); };
 $('#debugView').onclick=()=>{ if(active) window.open(localUrl('?tools=1&context=1'),'_blank'); };
-let timer; for(const id of ['q','project','since','until']) $('#'+id).addEventListener('input',()=>{clearTimeout(timer); timer=setTimeout(doSearch,180);});
+let timer; for(const id of ['q','since','until']) $('#'+id).addEventListener('input',()=>{clearTimeout(timer); timer=setTimeout(doSearch,180);});
 refresh();
 </script>
 </body>

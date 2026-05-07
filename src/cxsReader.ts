@@ -91,10 +91,6 @@ export class CxsReader {
 	list(filters: ListSessionFilters = {}): ManagedSession[] {
 		const where: string[] = [];
 		const params: unknown[] = [];
-		if (filters.project) {
-			where.push("s.cwd LIKE ?");
-			params.push(`%${filters.project}%`);
-		}
 		if (filters.cwd) {
 			where.push("s.cwd = ?");
 			params.push(filters.cwd);
@@ -205,7 +201,7 @@ export class CxsReader {
 		for (const r of rows) {
 			const session = sessionsByUuid.get(r.session_uuid);
 			if (!session) continue;
-			if (filters.project && !session.project.includes(filters.project) && !session.sourcePath.includes(filters.project)) continue;
+			if (filters.cwd && session.project !== filters.cwd && !session.sourcePath.startsWith(filters.cwd)) continue;
 			if (filters.since && (session.endedAt ?? session.startedAt ?? "") < filters.since) continue;
 			if (filters.until && (session.endedAt ?? session.startedAt ?? "") > filters.until) continue;
 			hits.push(buildHit(session, r));

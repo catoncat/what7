@@ -5,7 +5,7 @@ import type { MessageRole, TimelineItem } from "./types.js";
 
 // =============================================================================
 // Types — preserved external surface (consumed by dashboard.ts, cli.ts,
-// humanWorkflow.ts, and tests).
+// and tests).
 // =============================================================================
 
 export interface TokenUsageSummary {
@@ -62,8 +62,6 @@ export interface ManagedMessage {
 
 export interface ListSessionFilters {
 	query?: string;
-	project?: string;
-	/** Exact cwd match. Preferred over `project` for /api/v1 routes. */
 	cwd?: string;
 	agent?: string;
 	since?: string;
