@@ -37,6 +37,12 @@ export function fetchProjects(): Promise<Project[]> {
   return jget<{ projects: Project[] }>("/api/v1/projects").then((r) => r.projects);
 }
 
+export function fetchProject(slug: string): Promise<Project> {
+  return jget<{ project: Project }>(
+    `/api/v1/projects/${encodeURIComponent(slug)}`,
+  ).then((r) => r.project);
+}
+
 export function fetchSessions(params: {
   limit?: number;
   offset?: number;
@@ -50,7 +56,7 @@ export function fetchSessions(params: {
   return jget<SessionPage>(`/api/v1/sessions${qs ? `?${qs}` : ""}`);
 }
 
-export function fetchProjectSessions(projectId: string, params: {
+export function fetchProjectSessions(slug: string, params: {
   limit?: number;
   offset?: number;
   since?: string;
@@ -60,7 +66,7 @@ export function fetchProjectSessions(projectId: string, params: {
   for (const [k, v] of Object.entries(params)) if (v !== undefined) sp.set(k, String(v));
   const qs = sp.toString();
   return jget<SessionPage>(
-    `/api/v1/projects/${encodeURIComponent(projectId)}/sessions${qs ? `?${qs}` : ""}`,
+    `/api/v1/projects/${encodeURIComponent(slug)}/sessions${qs ? `?${qs}` : ""}`,
   );
 }
 

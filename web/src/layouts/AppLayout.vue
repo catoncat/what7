@@ -10,20 +10,26 @@ import type { Session } from "@/types";
 const route = useRoute();
 
 interface Filter {
-  kind: "inbox" | "project";
+  kind: "recent" | "project";
   slug?: string;
 }
 
 const filter = computed<Filter>(() => {
   const meta = route.meta as { kind?: string };
   if (meta?.kind === "project") return { kind: "project", slug: String(route.params.slug ?? "") };
-  return { kind: "inbox" };
+  return { kind: "recent" };
 });
 
 const sessions = ref<Session[]>([]);
 const loading = ref(false);
 
 async function loadSessions(f: Filter) {
+  if (f.kind !== "recent" && f.kind !== "project") {
+    // /search, /published, /settings: SessionList stays empty for now (M4).
+    sessions.value = [];
+    loading.value = false;
+    return;
+  }
   loading.value = true;
   const result = f.kind === "project" && f.slug
     ? await fetchProjectSessions(f.slug, { limit: 100 })
@@ -39,6 +45,13 @@ const listTitle = computed<string>(() => {
     const first = sessions.value[0];
     return first ? `Project · ${first.project}` : `Project`;
   }
+  if (filter.value.kind === "recent") return "Recent";
+  // For search / published / settings the SessionList still renders (empty),
+  // but the title reflects the active section.
+  const meta = route.meta as { kind?: string };
+  if (meta?.kind === "search") return "Search";
+  if (meta?.kind === "published") return "Published";
+  if (meta?.kind === "settings") return "Settings";
   return "Recent";
 });
 
@@ -49,8 +62,8 @@ const activeId = computed(() => {
 
 const buildLink = (sessionId: string): string => {
   const f = filter.value;
-  if (f.kind === "project") return `/projects/${f.slug}/${sessionId}`;
-  return `/inbox/${sessionId}`;
+  if (f.kind === "project") return `/p/${f.slug}/${sessionId}`;
+  return `/recent/${sessionId}`;
 };
 
 // Responsive shell state

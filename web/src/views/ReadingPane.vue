@@ -36,8 +36,9 @@ watch(() => props.id, (id) => load(id), { immediate: true });
 const listPath = computed<string>(() => {
   const meta = route.meta as { kind?: string };
   const slug = String(route.params.slug ?? "");
-  if (meta?.kind === "project") return `/projects/${slug}`;
-  return "/inbox";
+  if (meta?.kind === "project") return `/p/${slug}`;
+  if (meta?.kind === "session") return "/recent";
+  return "/recent";
 });
 
 function formatTime(iso: string | undefined): string {

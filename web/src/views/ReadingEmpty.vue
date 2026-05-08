@@ -5,7 +5,7 @@ const props = defineProps<{ kind?: string; scope?: string; slug?: string }>();
 
 const message = computed(() => {
   if (props.kind === "project") return `Pick a session in project ${props.slug}.`;
-  if (props.kind === "agent") return `Pick a session from agent ${props.slug}.`;
+  if (props.kind === "recent") return "Pick a session on the left to start reading.";
   return "Pick a session on the left to start reading.";
 });
 </script>

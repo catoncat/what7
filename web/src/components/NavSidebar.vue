@@ -63,20 +63,26 @@ function cycleTheme() {
       <kbd>⌘K</kbd>
     </div>
     <nav class="primary">
-      <RouterLink :to="{ name: 'inbox' }">
+      <RouterLink :to="{ name: 'recent' }">
         <span>Recent</span><span class="meta" v-text="totalSessions"></span>
+      </RouterLink>
+      <RouterLink :to="{ name: 'search' }">
+        <span>Search</span>
+      </RouterLink>
+      <RouterLink :to="{ name: 'published' }">
+        <span>Published</span>
       </RouterLink>
     </nav>
     <section class="group">
       <h3>Projects</h3>
       <RouterLink
         v-for="p in projects"
-        :key="p.id"
-        :to="{ name: 'project', params: { slug: p.id } }"
+        :key="p.slug"
+        :to="{ name: 'project', params: { slug: p.slug } }"
         :title="p.cwd"
       >
         <span class="dot"></span>
-        <span class="label" v-text="p.name"></span>
+        <span class="label" v-text="p.displayName ?? p.name"></span>
         <span class="meta" v-text="p.sessionCount"></span>
       </RouterLink>
       <div v-if="!projects.length" class="hint">No indexed projects yet.</div>
@@ -89,6 +95,9 @@ function cycleTheme() {
       </a>
     </section>
     <footer class="foot">
+      <RouterLink class="settings-link" :to="{ name: 'settings' }">
+        <span>Settings</span>
+      </RouterLink>
       <button class="theme" @click="cycleTheme" :title="`Theme: ${themeLabel}`">
         <span class="theme-icon" v-text="themeIcon"></span>
         <span v-text="themeLabel"></span>
@@ -179,6 +188,14 @@ function cycleTheme() {
   border-radius: var(--r-sm); color: var(--fg-2);
 }
 .foot button:hover { color: var(--fg); }
+.foot .settings-link {
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  font-size: 12.5px;
+}
+.foot .settings-link:hover { background: var(--surface-2); color: var(--fg); }
+.foot .settings-link.router-link-active { background: var(--surface-2); color: var(--fg); }
 .foot .theme {
   display: flex; align-items: center; gap: 8px;
   justify-content: flex-start;

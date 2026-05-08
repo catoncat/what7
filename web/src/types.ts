@@ -15,12 +15,14 @@ export type MessageKind =
   | "error";
 
 export interface Project {
-  id: string;          // base64url(cwd)
-  name: string;        // basename(cwd)
+  slug: string;        // URL-safe derived from cwd (basename + parent-basename upgrade)
+  name: string;        // basename(cwd) — raw, used when displayName is unset
   cwd: string;
   sessionCount: number;
   messageCount: number;
   lastSessionAt: string | null;
+  displayName?: string; // user-set alias (M4.3)
+  hidden?: boolean;     // user-set sidebar filter (M4.3)
 }
 
 export interface Session {
