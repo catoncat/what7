@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 import process from "node:process";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { startDashboard } from "./dashboard.js";
 import { StateStore, toSafeRecord } from "./state.js";
 import { SessionIndexStore, syncSessions } from "./sessionIndex.js";
 import { PublishClient } from "./publishClient.js";
+import { CxsReader, DEFAULT_CXS_DB_PATH } from "./cxsReader.js";
 
 interface GlobalOptions {
   stateDir?: string;
@@ -57,6 +61,49 @@ program
       const remote = await client.unpublish(record.remoteId, record.deleteCapability);
       const updated = await store.update(record.localId, { status: "unpublished", url: remote.url ?? record.url });
       output(options.json || globals.json, { record: toSafeRecord(updated), remote }, `Unpublished ${updated.url}`);
+    });
+  });
+
+program
+  .command("list")
+  .option("--json", "emit stable JSON output")
+  .description("List locally tracked publish history (cron / automation friendly).")
+  .action(async (options: { json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const store = new StateStore(globals.stateDir);
+      const records = (await store.list()).map(toSafeRecord);
+      const asJson = options.json || globals.json;
+      if (asJson) console.log(JSON.stringify({ records }, null, 2));
+      else if (!records.length) console.log("No published records yet.");
+      else {
+        for (const r of records) {
+          const tag = r.status === "published" ? "✓" : r.status === "unpublished" ? "—" : "!";
+          console.log(`${tag} ${r.url}  ${r.title}  (${r.localId})`);
+        }
+      }
+    });
+  });
+
+program
+  .command("doctor")
+  .option("--json", "emit stable JSON output")
+  .description("Inspect local environment: cxs db, state dir, worker env, web/dist build.")
+  .action(async (options: { json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const report = await runDoctor(globals.stateDir);
+      const asJson = options.json || globals.json;
+      if (asJson) {
+        console.log(JSON.stringify(report, null, 2));
+        return;
+      }
+      const mark = (ok: boolean | "warn") => (ok === true ? "✓" : ok === "warn" ? "!" : "✗");
+      for (const check of report.checks) {
+        console.log(`${mark(check.status)} ${check.label}: ${check.detail}`);
+      }
+      const hasFail = report.checks.some((c) => c.status === false);
+      if (hasFail) process.exitCode = 1;
     });
   });
 
@@ -128,4 +175,114 @@ function printError(error: unknown): void {
 
 function isCommanderHelp(error: unknown): error is { exitCode: number } {
   return Boolean(error && typeof error === "object" && "code" in error && String((error as { code?: unknown }).code).startsWith("commander."));
+}
+
+// ---------------------------------------------------------------------------
+// doctor
+// ---------------------------------------------------------------------------
+
+interface DoctorCheck {
+  label: string;
+  status: boolean | "warn";
+  detail: string;
+}
+
+interface DoctorReport {
+  state_dir: string;
+  cxs_db_path: string;
+  worker_url: string | null;
+  admin_token_set: boolean;
+  checks: DoctorCheck[];
+}
+
+async function runDoctor(stateDir?: string): Promise<DoctorReport> {
+  const store = new StateStore(stateDir);
+  const cxsPath = process.env.CXS_DB ?? DEFAULT_CXS_DB_PATH;
+  const workerUrl = process.env.WHAT7_WORKER_URL ?? null;
+  const adminToken = Boolean(process.env.WHAT7_ADMIN_TOKEN);
+  const checks: DoctorCheck[] = [];
+
+  // cxs db
+  try {
+    await fs.stat(cxsPath);
+    try {
+      const reader = new CxsReader(cxsPath);
+      const analytics = reader.analytics();
+      reader.close();
+      checks.push({
+        label: "cxs index",
+        status: true,
+        detail: `${cxsPath} · ${analytics.sessionCount} sessions / ${analytics.projectCount ?? 0} projects`,
+      });
+    } catch (error) {
+      checks.push({
+        label: "cxs index",
+        status: false,
+        detail: `${cxsPath} exists but cannot be opened: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  } catch {
+    checks.push({
+      label: "cxs index",
+      status: false,
+      detail: `${cxsPath} not found — run 'cxs sync' first.`,
+    });
+  }
+
+  // state dir
+  try {
+    await fs.mkdir(store.dir, { recursive: true, mode: 0o700 });
+    const state = await store.load();
+    checks.push({
+      label: "state dir",
+      status: true,
+      detail: `${store.file} · ${state.records.length} records · ${state.shortcuts.length} shortcuts · ${state.projects.length} project prefs`,
+    });
+  } catch (error) {
+    checks.push({
+      label: "state dir",
+      status: false,
+      detail: `${store.file} not readable: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  // worker env
+  if (workerUrl) {
+    checks.push({
+      label: "worker url",
+      status: true,
+      detail: `${workerUrl}${adminToken ? " (admin token set)" : " (no admin token)"}`,
+    });
+  } else {
+    checks.push({
+      label: "worker url",
+      status: "warn",
+      detail: "WHAT7_WORKER_URL not set — publish/unpublish will be disabled.",
+    });
+  }
+
+  // web/dist
+  const distIndex = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "web", "dist", "index.html");
+  try {
+    await fs.stat(distIndex);
+    checks.push({
+      label: "web/dist",
+      status: true,
+      detail: `${distIndex}`,
+    });
+  } catch {
+    checks.push({
+      label: "web/dist",
+      status: "warn",
+      detail: `${distIndex} missing — run 'cd web && vp build' before 'what7 serve'.`,
+    });
+  }
+
+  return {
+    state_dir: store.dir,
+    cxs_db_path: cxsPath,
+    worker_url: workerUrl,
+    admin_token_set: adminToken,
+    checks,
+  };
 }
