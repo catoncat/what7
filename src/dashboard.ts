@@ -81,10 +81,45 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
       if (req.method === "GET" && url.pathname === "/api/v1/sessions") {
         const limit = clampLimit(numberParam(url.searchParams.get("limit")));
         const offset = numberParam(url.searchParams.get("offset")) ?? 0;
+        const q = url.searchParams.get("q") ?? undefined;
+        const since = url.searchParams.get("since") ?? undefined;
+        const until = url.searchParams.get("until") ?? undefined;
+        const projectSlug = url.searchParams.get("project") ?? undefined;
+        const sharedOnly = url.searchParams.get("shared") === "1";
+
+        let cwd: string | undefined;
+        if (projectSlug) {
+          const project = await sessionStore.findProjectBySlug(projectSlug);
+          if (!project) return sendJson(res, { error: "project not found" }, 404);
+          cwd = project.cwd;
+        }
+
+        if (sharedOnly) {
+          // Shared is a low-cardinality overlay (usually <100 records).
+          // Join in-app: fetch full filtered list, keep only those whose
+          // sourcePath shows up as a published record.
+          const published = (await publishStore.list()).filter((r) => r.status === "published");
+          const publishedPaths = new Set(published.map((r) => r.sourcePath));
+          const matched = await sessionStore.list({
+            query: q,
+            since,
+            until,
+            ...(cwd ? { cwd } : {}),
+            limit: MAX_PAGE_LIMIT,
+            offset: 0,
+          });
+          const filtered = matched.filter((s) => publishedPaths.has(s.sourcePath));
+          return sendJson(res, {
+            sessions: filtered.slice(offset, offset + limit),
+            page: { limit, offset, has_more: filtered.length > offset + limit },
+          });
+        }
+
         const sessions = await sessionStore.list({
-          query: url.searchParams.get("q") ?? undefined,
-          since: url.searchParams.get("since") ?? undefined,
-          until: url.searchParams.get("until") ?? undefined,
+          query: q,
+          since,
+          until,
+          ...(cwd ? { cwd } : {}),
           limit: limit + 1,
           offset,
         });

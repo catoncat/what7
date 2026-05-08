@@ -107,4 +107,41 @@ describe("dashboard", () => {
 
 		await dashboard.close();
 	});
+
+	it("filters /api/v1/sessions by project=slug and by shared=1", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-search-"));
+		const { dbPath } = buildCxsFixture(dir, sampleSessions());
+		// Publish sess_b so shared=1 can match it via sourcePath.
+		const store = new StateStore(dir);
+		await store.add({
+			remoteId: "remote_sb",
+			url: "http://example/s/remote_sb",
+			sourcePath: "/codex/sess_b.jsonl",
+			title: "Add CI workflow",
+			workerUrl: "http://example",
+		});
+
+		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
+
+		const byProject = (await (
+			await fetch(new URL("/api/v1/sessions?project=foo", dashboard.url))
+		).json()) as { sessions: Array<{ id: string }>; page: { has_more: boolean } };
+		expect(byProject.sessions.map((s) => s.id).sort()).toEqual(["sess_a", "sess_b"]);
+
+		const sharedOnly = (await (
+			await fetch(new URL("/api/v1/sessions?shared=1", dashboard.url))
+		).json()) as { sessions: Array<{ id: string }> };
+		expect(sharedOnly.sessions.map((s) => s.id)).toEqual(["sess_b"]);
+
+		const sharedBar = (await (
+			await fetch(new URL("/api/v1/sessions?shared=1&project=bar", dashboard.url))
+		).json()) as { sessions: Array<{ id: string }> };
+		// sess_c is in bar but not published → empty.
+		expect(sharedBar.sessions).toEqual([]);
+
+		const badProject = await fetch(new URL("/api/v1/sessions?project=nope", dashboard.url));
+		expect(badProject.status).toBe(404);
+
+		await dashboard.close();
+	});
 });
