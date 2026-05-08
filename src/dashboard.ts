@@ -9,8 +9,7 @@ import { StateStore, toSafeRecord } from "./state.js";
 import { SessionIndexStore } from "./sessionIndex.js";
 import type { ProjectInfo } from "./sessionIndex.js";
 import type { ProjectPref } from "./types.js";
-import { readTranscriptFile, sha256 } from "./io.js";
-import { renderTranscript } from "./renderer.js";
+import { buildTranscriptForShare } from "./api/transcript.js";
 
 const DEFAULT_PAGE_LIMIT = 30;
 const MAX_PAGE_LIMIT = 100;
@@ -288,26 +287,25 @@ async function publishIndexedSession(res: http.ServerResponse, publishStore: Sta
   const workerUrl = process.env.WHAT7_WORKER_URL;
   const adminToken = process.env.WHAT7_ADMIN_TOKEN;
   if (!workerUrl) return sendJson(res, { error: "WHAT7_WORKER_URL is not set for this dashboard process" }, 409);
-  const transcript = await readTranscriptFile(session.sourcePath);
-  const rendered = renderTranscript(transcript, { sourcePath: session.sourcePath });
-  const htmlDir = path.join(publishStore.dir, "html");
-  await fs.mkdir(htmlDir, { recursive: true, mode: 0o700 });
-  const htmlPath = path.join(htmlDir, `${safeFilename(session.id)}.html`);
-  await fs.writeFile(htmlPath, rendered.html, "utf8");
-  const published = await new PublishClient({ workerUrl, adminToken }).publish({
-    title: rendered.title,
-    html: rendered.html,
+  const built = await buildTranscriptForShare({
     sourcePath: session.sourcePath,
-    sourceHash: sha256(await fs.readFile(session.sourcePath)),
+    sessionId: session.id,
+    stateDir: publishStore.dir,
+  });
+  const published = await new PublishClient({ workerUrl, adminToken }).publish({
+    title: built.title,
+    html: built.html,
+    sourcePath: session.sourcePath,
+    sourceHash: built.sourceHash,
   });
   const record = await publishStore.add({
     remoteId: published.id,
     url: published.url,
     sourcePath: session.sourcePath,
-    title: rendered.title,
+    title: built.title,
     deleteCapability: published.deleteToken,
     workerUrl,
-    htmlPath,
+    htmlPath: built.htmlPath,
   });
   return sendJson(res, { record: toSafeRecord(record), url: published.url });
 }
@@ -362,10 +360,6 @@ function numberParam(value: string | null): number | undefined {
 function clampLimit(value: number | undefined): number {
   if (!value || value <= 0) return DEFAULT_PAGE_LIMIT;
   return Math.min(value, MAX_PAGE_LIMIT);
-}
-
-function safeFilename(value: string): string {
-  return value.replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 120);
 }
 
 /**
