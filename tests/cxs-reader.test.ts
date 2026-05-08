@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CxsReader, decodeProjectId, encodeProjectId } from "../src/cxsReader.js";
+import { CxsReader } from "../src/cxsReader.js";
 import { buildCxsFixture, sampleSessions } from "./helpers/cxsFixture.js";
 
 describe("CxsReader", () => {
@@ -77,17 +77,18 @@ describe("CxsReader", () => {
 		expect(byProject.bar).toBe(1);
 	});
 
-	it("listProjects() groups by cwd with encoded id", () => {
+	it("listProjects() groups by cwd with basename slug", () => {
 		const projects = reader.listProjects();
 		expect(projects.map((p) => p.name).sort()).toEqual(["bar", "foo"]);
 		const foo = projects.find((p) => p.name === "foo");
 		expect(foo?.sessionCount).toBe(2);
 		expect(foo?.messageCount).toBe(7);
-		expect(decodeProjectId(foo!.id)).toBe("/Users/test/repos/foo");
+		expect(foo?.slug).toBe("foo");
 	});
 
-	it("encodeProjectId/decodeProjectId roundtrips arbitrary cwd", () => {
-		const cwd = "/path with spaces/proj+name";
-		expect(decodeProjectId(encodeProjectId(cwd))).toBe(cwd);
+	it("findProjectBySlug() resolves back to the right cwd", () => {
+		const foo = reader.findProjectBySlug("foo");
+		expect(foo?.cwd).toBe("/Users/test/repos/foo");
+		expect(reader.findProjectBySlug("nope")).toBeUndefined();
 	});
 });

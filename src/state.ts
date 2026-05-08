@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { PublishRecord, SafePublishRecord, Shortcut, StateFile } from "./types.js";
+import type {
+  ProjectPref,
+  PublishRecord,
+  SafePublishRecord,
+  Shortcut,
+  StateFile,
+} from "./types.js";
 
 const STATE_VERSION = 1 as const;
 
@@ -38,10 +44,13 @@ export class StateStore {
         version: STATE_VERSION,
         records: parsed.records,
         shortcuts: parsed.shortcuts,
+        // M3.5: projects is additive. Tolerate missing field for forward
+        // compatibility with M1/M2-era state.json files.
+        projects: Array.isArray(parsed.projects) ? parsed.projects : [],
       };
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        return { version: STATE_VERSION, records: [], shortcuts: [] };
+        return { version: STATE_VERSION, records: [], shortcuts: [], projects: [] };
       }
       throw error;
     }
@@ -145,6 +154,15 @@ export class StateStore {
     if (state.shortcuts.length === before) return false;
     await this.save(state);
     return true;
+  }
+
+  /**
+   * Read-only access to per-project user prefs (displayName / hidden).
+   * Mutations are added in M4.3 when Settings wires them up.
+   */
+  async listProjectPrefs(): Promise<ProjectPref[]> {
+    const state = await this.load();
+    return state.projects;
   }
 }
 

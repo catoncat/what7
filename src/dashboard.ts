@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import { PublishClient } from "./publishClient.js";
 import { listen, close, openBrowser } from "./server.js";
 import { StateStore, toSafeRecord } from "./state.js";
-import { SessionIndexStore, decodeProjectId } from "./sessionIndex.js";
+import { SessionIndexStore } from "./sessionIndex.js";
+import type { ProjectInfo } from "./sessionIndex.js";
+import type { ProjectPref } from "./types.js";
 import { readTranscriptFile, sha256 } from "./io.js";
 import { renderTranscript } from "./renderer.js";
 
@@ -60,7 +62,20 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
       // ---------------------------------------------------------------
 
       if (req.method === "GET" && url.pathname === "/api/v1/projects") {
-        return sendJson(res, { projects: await sessionStore.listProjects() });
+        const [projects, prefs] = await Promise.all([
+          sessionStore.listProjects(),
+          publishStore.listProjectPrefs(),
+        ]);
+        return sendJson(res, { projects: mergeProjectPrefs(projects, prefs) });
+      }
+
+      const projectDetailMatch = url.pathname.match(/^\/api\/v1\/projects\/([^/]+)$/);
+      if (req.method === "GET" && projectDetailMatch) {
+        const slug = decodeURIComponent(projectDetailMatch[1] ?? "");
+        const project = await sessionStore.findProjectBySlug(slug);
+        if (!project) return sendJson(res, { error: "project not found" }, 404);
+        const prefs = await publishStore.listProjectPrefs();
+        return sendJson(res, { project: mergeProjectPrefs([project], prefs)[0] });
       }
 
       if (req.method === "GET" && url.pathname === "/api/v1/sessions") {
@@ -82,12 +97,13 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
 
       const projectSessionsMatch = url.pathname.match(/^\/api\/v1\/projects\/([^/]+)\/sessions$/);
       if (req.method === "GET" && projectSessionsMatch) {
-        const projectId = decodeURIComponent(projectSessionsMatch[1] ?? "");
-        const cwd = decodeProjectId(projectId);
+        const slug = decodeURIComponent(projectSessionsMatch[1] ?? "");
+        const project = await sessionStore.findProjectBySlug(slug);
+        if (!project) return sendJson(res, { error: "project not found" }, 404);
         const limit = clampLimit(numberParam(url.searchParams.get("limit")));
         const offset = numberParam(url.searchParams.get("offset")) ?? 0;
         const sessions = await sessionStore.list({
-          cwd,
+          cwd: project.cwd,
           since: url.searchParams.get("since") ?? undefined,
           until: url.searchParams.get("until") ?? undefined,
           limit: limit + 1,
@@ -297,4 +313,24 @@ function clampLimit(value: number | undefined): number {
 
 function safeFilename(value: string): string {
   return value.replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 120);
+}
+
+/**
+ * Overlay user-set `displayName` / `hidden` from state.json onto auto-derived
+ * ProjectInfo rows. slug is always the derived value (source of truth for URLs).
+ */
+function mergeProjectPrefs(
+  projects: ProjectInfo[],
+  prefs: ProjectPref[],
+): Array<ProjectInfo & { displayName?: string; hidden?: boolean }> {
+  const byCwd = new Map(prefs.map((p) => [p.cwd, p] as const));
+  return projects.map((p) => {
+    const pref = byCwd.get(p.cwd);
+    if (!pref) return p;
+    return {
+      ...p,
+      ...(pref.displayName ? { displayName: pref.displayName } : {}),
+      ...(pref.hidden ? { hidden: pref.hidden } : {}),
+    };
+  });
 }

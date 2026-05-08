@@ -84,6 +84,20 @@ export interface StateFile {
   version: 1;
   records: PublishRecord[];
   shortcuts: Shortcut[];
+  projects: ProjectPref[];
+}
+
+/**
+ * Per-project user preference persisted alongside publish history in state.json.
+ * The slug is the auto-derived short id from `src/projects.ts` — users cannot
+ * change it, only `displayName` and `hidden`. cwd is the authoritative key.
+ */
+export interface ProjectPref {
+  cwd: string;
+  slug: string;
+  displayName?: string;
+  hidden?: boolean;
+  updatedAt: string;
 }
 
 /**

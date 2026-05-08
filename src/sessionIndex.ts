@@ -78,10 +78,10 @@ export interface SearchHit {
 
 /**
  * One project = one distinct cwd in the cxs index.
- * `id` is base64url(cwd) so it's safe as a URL path segment.
+ * `slug` is the URL-safe short identifier derived by `src/projects.ts`.
  */
 export interface ProjectInfo {
-	id: string;
+	slug: string;
 	name: string;
 	cwd: string;
 	sessionCount: number;
@@ -175,6 +175,10 @@ export class SessionIndexStore {
 		return this.reader.listProjects();
 	}
 
+	async findProjectBySlug(slug: string): Promise<ProjectInfo | undefined> {
+		return this.reader.findProjectBySlug(slug);
+	}
+
 	close(): void {
 		this.reader.close();
 	}
@@ -247,5 +251,3 @@ function parseIndexedCount(text: string): number | undefined {
 export function defaultSessionRoots(): string[] {
 	return [];
 }
-
-export { encodeProjectId, decodeProjectId } from "./cxsReader.js";

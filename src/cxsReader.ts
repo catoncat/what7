@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import os from "node:os";
+import { deriveSlugs } from "./projects.js";
 import type {
 	AnalyticsSummary,
 	ListSessionFilters,
@@ -282,14 +283,23 @@ export class CxsReader {
 				messageCount: number;
 				lastSessionAt: string | null;
 			}>;
+		const slugs = deriveSlugs(rows.map((r) => ({ cwd: r.cwd, sessionCount: r.sessionCount })));
 		return rows.map((r) => ({
-			id: encodeProjectId(r.cwd),
-			name: path.basename(r.cwd),
+			slug: slugs[r.cwd] ?? (path.basename(r.cwd) || r.cwd),
+			name: path.basename(r.cwd) || r.cwd,
 			cwd: r.cwd,
 			sessionCount: r.sessionCount,
 			messageCount: r.messageCount,
 			lastSessionAt: r.lastSessionAt,
 		}));
+	}
+
+	/**
+	 * Resolve a slug back to its cwd using the same derivation as listProjects().
+	 * Returns undefined when the slug doesn't map to any indexed cwd.
+	 */
+	findProjectBySlug(slug: string): ProjectInfo | undefined {
+		return this.listProjects().find((p) => p.slug === slug);
 	}
 }
 
@@ -356,12 +366,4 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
 	const v = value ?? fallback;
 	if (!Number.isFinite(v) || v <= 0) return fallback;
 	return Math.min(Math.floor(v), max);
-}
-
-export function encodeProjectId(cwd: string): string {
-	return Buffer.from(cwd, "utf8").toString("base64url");
-}
-
-export function decodeProjectId(id: string): string {
-	return Buffer.from(id, "base64url").toString("utf8");
 }

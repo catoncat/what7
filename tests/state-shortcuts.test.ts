@@ -71,6 +71,6 @@ describe("StateStore shortcuts", () => {
 	it("load() returns empty state when state.json does not exist", async () => {
 		const { store } = await freshStore();
 		const loaded = await store.load();
-		expect(loaded).toEqual({ version: 1, records: [], shortcuts: [] });
+		expect(loaded).toEqual({ version: 1, records: [], shortcuts: [], projects: [] });
 	});
 });

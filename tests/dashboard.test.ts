@@ -6,7 +6,6 @@ import path from "node:path";
 import { startDashboard } from "../src/dashboard.js";
 import { StateStore } from "../src/state.js";
 import { listen, close } from "../src/server.js";
-import { encodeProjectId } from "../src/cxsReader.js";
 import { buildCxsFixture, sampleSessions } from "./helpers/cxsFixture.js";
 
 describe("dashboard", () => {
@@ -72,18 +71,26 @@ describe("dashboard", () => {
 		expect(sessionsRes.page.has_more).toBe(false);
 
 		const projectsRes = (await (await fetch(new URL("/api/v1/projects", dashboard.url))).json()) as {
-			projects: Array<{ id: string; name: string; sessionCount: number }>;
+			projects: Array<{ slug: string; name: string; sessionCount: number }>;
 		};
 		const byName = Object.fromEntries(projectsRes.projects.map((p) => [p.name, p]));
 		expect(byName.foo?.sessionCount).toBe(2);
 		expect(byName.bar?.sessionCount).toBe(1);
-		expect(byName.foo?.id).toBe(encodeProjectId("/Users/test/repos/foo"));
+		expect(byName.foo?.slug).toBe("foo");
 
-		const fooId = byName.foo!.id;
+		const fooSlug = byName.foo!.slug;
+		const projectDetail = (await (
+			await fetch(new URL(`/api/v1/projects/${fooSlug}`, dashboard.url))
+		).json()) as { project: { slug: string; cwd: string; sessionCount: number } };
+		expect(projectDetail.project.cwd).toBe("/Users/test/repos/foo");
+
 		const projectSessionsRes = (await (
-			await fetch(new URL(`/api/v1/projects/${fooId}/sessions`, dashboard.url))
+			await fetch(new URL(`/api/v1/projects/${fooSlug}/sessions`, dashboard.url))
 		).json()) as { sessions: Array<{ id: string }> };
 		expect(projectSessionsRes.sessions.map((s) => s.id).sort()).toEqual(["sess_a", "sess_b"]);
+
+		const missingProject = await fetch(new URL("/api/v1/projects/nope", dashboard.url));
+		expect(missingProject.status).toBe(404);
 
 		const sessionWithMessages = (await (
 			await fetch(new URL("/api/v1/sessions/sess_a?messages=1", dashboard.url))
