@@ -73,4 +73,38 @@ describe("StateStore shortcuts", () => {
 		const loaded = await store.load();
 		expect(loaded).toEqual({ version: 1, records: [], shortcuts: [], projects: [] });
 	});
+
+	it("upsertProjectPref adds a new entry then patches it on second call", async () => {
+		const { store } = await freshStore();
+		const first = await store.upsertProjectPref({
+			cwd: "/x/foo",
+			slug: "foo",
+			displayName: "Foo",
+		});
+		expect(first.displayName).toBe("Foo");
+		expect(first.hidden).toBeUndefined();
+
+		const second = await store.upsertProjectPref({
+			cwd: "/x/foo",
+			slug: "foo",
+			hidden: true,
+		});
+		// hidden applied, displayName preserved
+		expect(second.hidden).toBe(true);
+		expect(second.displayName).toBe("Foo");
+
+		const third = await store.upsertProjectPref({
+			cwd: "/x/foo",
+			slug: "foo",
+			displayName: null,
+			hidden: false,
+		});
+		// both cleared
+		expect(third.displayName).toBeUndefined();
+		expect(third.hidden).toBeUndefined();
+
+		const all = await store.listProjectPrefs();
+		expect(all).toHaveLength(1);
+		expect(all[0]?.cwd).toBe("/x/foo");
+	});
 });

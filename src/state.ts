@@ -164,6 +164,38 @@ export class StateStore {
     const state = await this.load();
     return state.projects;
   }
+
+  /**
+   * Upsert by cwd. `slug` is the auto-derived value at call time; we store
+   * it for forensics but UI always re-derives from cxs. Passing displayName
+   * undefined keeps the existing value; explicit empty string clears it.
+   */
+  async upsertProjectPref(input: {
+    cwd: string;
+    slug: string;
+    displayName?: string | null;
+    hidden?: boolean;
+  }): Promise<ProjectPref> {
+    const state = await this.load();
+    const now = new Date().toISOString();
+    const idx = state.projects.findIndex((p) => p.cwd === input.cwd);
+    const prior = idx === -1 ? undefined : state.projects[idx];
+    const next: ProjectPref = {
+      cwd: input.cwd,
+      slug: input.slug,
+      ...(prior?.displayName !== undefined ? { displayName: prior.displayName } : {}),
+      ...(prior?.hidden !== undefined ? { hidden: prior.hidden } : {}),
+      updatedAt: now,
+    };
+    if (input.displayName === null || input.displayName === "") delete next.displayName;
+    else if (typeof input.displayName === "string") next.displayName = input.displayName;
+    if (input.hidden === false) delete next.hidden;
+    else if (input.hidden === true) next.hidden = true;
+    if (idx === -1) state.projects.push(next);
+    else state.projects[idx] = next;
+    await this.save(state);
+    return next;
+  }
 }
 
 export function toSafeRecord(record: PublishRecord): SafePublishRecord {

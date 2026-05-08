@@ -144,4 +144,50 @@ describe("dashboard", () => {
 
 		await dashboard.close();
 	});
+
+	it("patches project displayName / hidden through PATCH /api/v1/projects/:slug", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-patch-"));
+		const { dbPath } = buildCxsFixture(dir, sampleSessions());
+
+		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
+
+		const patched = (await (
+			await fetch(new URL("/api/v1/projects/foo", dashboard.url), {
+				method: "PATCH",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ displayName: "Foo Alias", hidden: true }),
+			})
+		).json()) as { project: { displayName?: string; hidden?: boolean; slug: string } };
+		expect(patched.project.slug).toBe("foo");
+		expect(patched.project.displayName).toBe("Foo Alias");
+		expect(patched.project.hidden).toBe(true);
+
+		// Fetching the list should reflect the pref overlay.
+		const projects = (await (await fetch(new URL("/api/v1/projects", dashboard.url))).json()) as {
+			projects: Array<{ slug: string; displayName?: string; hidden?: boolean }>;
+		};
+		const foo = projects.projects.find((p) => p.slug === "foo");
+		expect(foo?.displayName).toBe("Foo Alias");
+		expect(foo?.hidden).toBe(true);
+
+		// Clearing works via null / false.
+		const cleared = (await (
+			await fetch(new URL("/api/v1/projects/foo", dashboard.url), {
+				method: "PATCH",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ displayName: null, hidden: false }),
+			})
+		).json()) as { project: { displayName?: string; hidden?: boolean } };
+		expect(cleared.project.displayName).toBeUndefined();
+		expect(cleared.project.hidden).toBeUndefined();
+
+		const missing = await fetch(new URL("/api/v1/projects/nope", dashboard.url), {
+			method: "PATCH",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ displayName: "x" }),
+		});
+		expect(missing.status).toBe(404);
+
+		await dashboard.close();
+	});
 });

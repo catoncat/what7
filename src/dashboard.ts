@@ -78,6 +78,24 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
         return sendJson(res, { project: mergeProjectPrefs([project], prefs)[0] });
       }
 
+      if (req.method === "PATCH" && projectDetailMatch) {
+        const slug = decodeURIComponent(projectDetailMatch[1] ?? "");
+        const project = await sessionStore.findProjectBySlug(slug);
+        if (!project) return sendJson(res, { error: "project not found" }, 404);
+        const body = await readJson(req);
+        const patch: Parameters<StateStore["upsertProjectPref"]>[0] = {
+          cwd: project.cwd,
+          slug: project.slug,
+        };
+        if (body.displayName === null || typeof body.displayName === "string") {
+          patch.displayName = body.displayName as string | null;
+        }
+        if (typeof body.hidden === "boolean") patch.hidden = body.hidden;
+        await publishStore.upsertProjectPref(patch);
+        const prefs = await publishStore.listProjectPrefs();
+        return sendJson(res, { project: mergeProjectPrefs([project], prefs)[0] });
+      }
+
       if (req.method === "GET" && url.pathname === "/api/v1/sessions") {
         const limit = clampLimit(numberParam(url.searchParams.get("limit")));
         const offset = numberParam(url.searchParams.get("offset")) ?? 0;
