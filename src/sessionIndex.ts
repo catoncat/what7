@@ -4,18 +4,10 @@ import { StateStore } from "./state.js";
 import type { MessageRole, TimelineItem } from "./types.js";
 
 // =============================================================================
-// Types — preserved external surface (consumed by dashboard.ts, cli.ts,
-// and tests).
+// Types — external surface consumed by dashboard.ts, cli.ts, and tests.
+// Shaped to match exactly what cxs can answer; fields that were legacy
+// zero-fills for the pre-cxs backend have been dropped.
 // =============================================================================
-
-export interface TokenUsageSummary {
-	inputTokens: number;
-	outputTokens: number;
-	cachedInputTokens: number;
-	reasoningOutputTokens: number;
-	totalTokens: number;
-	estimatedCostUsd: number | null;
-}
 
 export interface ManagedSession {
 	id: string;
@@ -23,57 +15,32 @@ export interface ManagedSession {
 	title: string;
 	project: string;
 	sourcePath: string;
-	sourceSize: number;
-	sourceMtimeMs: number;
 	startedAt?: string;
 	endedAt?: string;
 	updatedAt: string;
 	model?: string;
-	lineCount: number;
 	messageCount: number;
-	userMessageCount: number;
-	assistantMessageCount: number;
-	/** Always 0 under cxs backend (cxs squashes events into role=assistant). */
-	toolCallCount: number;
-	/** Always 0 under cxs backend. */
-	toolResultCount: number;
-	/** Always 0 under cxs backend. */
-	reasoningCount: number;
 	firstMessage: string;
-	/** Always zero usage under cxs backend (token usage isn't indexed). */
-	tokenUsage: TokenUsageSummary;
-	/** Always {} under cxs backend (per-tool counts aren't indexed). */
-	toolUsage: Record<string, number>;
 }
 
 export interface ManagedMessage {
 	id: string;
 	sessionId: string;
 	order: number;
-	line: number;
 	kind: TimelineItem["kind"];
 	role?: MessageRole;
 	timestamp?: string;
 	title: string;
 	content: string;
-	toolName?: string;
-	callId?: string;
 }
 
 export interface ListSessionFilters {
 	query?: string;
 	cwd?: string;
-	agent?: string;
 	since?: string;
 	until?: string;
 	limit?: number;
 	offset?: number;
-}
-
-export interface SearchHit {
-	session: ManagedSession;
-	message: ManagedMessage;
-	snippet: string;
 }
 
 /**
@@ -89,31 +56,18 @@ export interface ProjectInfo {
 	lastSessionAt: string | null;
 }
 
+/**
+ * Bare aggregates that `what7 doctor` actually surfaces. Historically this
+ * had daily/tools/agents/token rollups that no UI consumed; trimmed down.
+ */
 export interface AnalyticsSummary {
 	sessionCount: number;
-	messageCount: number;
-	userMessageCount: number;
-	assistantMessageCount: number;
-	toolCallCount: number;
-	toolResultCount: number;
-	totalDurationMs: number;
-	tokenUsage: TokenUsageSummary;
-	projects: Array<{ project: string; sessionCount: number; messageCount: number }>;
-	agents: Array<{ agent: string; sessionCount: number }>;
-	tools: Array<{ tool: string; count: number }>;
-	daily: Array<{ date: string; sessions: number; messages: number; outputTokens: number }>;
-	/** M1 addition: distinct cwd projects in the cxs index. */
-	projectCount?: number;
-	/** M1 addition: sessions whose ended_at is within the last 7 days. */
-	last7dSessionCount?: number;
+	projectCount: number;
+	last7dSessionCount: number;
 }
 
 export interface SyncOptions {
 	stateDir?: string;
-	/** No-op under the cxs backend; cxs decides its own roots. Kept for surface compat. */
-	dirs?: string[];
-	/** No-op under the cxs backend. Kept for surface compat. */
-	maxFiles?: number;
 	/** Override the cxs SQLite path. */
 	dbPath?: string;
 	/** Override the cxs binary (defaults to env CXS_BIN, then "cxs"). */
@@ -121,24 +75,21 @@ export interface SyncOptions {
 }
 
 export interface SyncResult {
-	roots: string[];
-	scannedFiles: number;
 	indexedSessions: number;
-	skippedFiles: Array<{ path: string; error: string }>;
 	/** Raw stdout from `cxs sync`. */
 	cxsStdout?: string;
 	/** Exit code from `cxs sync`. */
-	cxsExitCode?: number;
+	cxsExitCode: number;
 }
 
 // =============================================================================
-// Store — thin facade over CxsReader (read-only). Async wrappers preserve the
-// pre-existing call shape while CxsReader is synchronous internally.
+// Store — thin async facade over CxsReader. The async wrappers preserve the
+// pre-existing call shape while CxsReader itself is synchronous.
 // =============================================================================
 
 export class SessionIndexStore {
 	readonly dir: string;
-	/** Path to the cxs SQLite index file (was previously a what7-owned JSON file). */
+	/** Path to the cxs SQLite index file. */
 	readonly file: string;
 	private readonly reader: CxsReader;
 
@@ -162,12 +113,7 @@ export class SessionIndexStore {
 		return this.reader.messages(sessionId);
 	}
 
-	async search(query: string, filters: ListSessionFilters = {}): Promise<SearchHit[]> {
-		return this.reader.search(query, filters);
-	}
-
-	/** `_filters` accepted for CLI-surface compat but currently ignored. */
-	async analytics(_filters?: ListSessionFilters): Promise<AnalyticsSummary> {
+	async analytics(): Promise<AnalyticsSummary> {
 		return this.reader.analytics();
 	}
 
@@ -200,10 +146,8 @@ export async function syncSessions(options: SyncOptions = {}): Promise<SyncResul
 			child = spawn(cxsBin, args, { stdio: ["ignore", "pipe", "pipe"] });
 		} catch (error) {
 			resolve({
-				roots: [],
-				scannedFiles: 0,
 				indexedSessions: 0,
-				skippedFiles: [{ path: cxsBin, error: error instanceof Error ? error.message : String(error) }],
+				cxsStdout: error instanceof Error ? error.message : String(error),
 				cxsExitCode: -1,
 			});
 			return;
@@ -215,21 +159,12 @@ export async function syncSessions(options: SyncOptions = {}): Promise<SyncResul
 			stderr += chunk.toString("utf8");
 		});
 		child.on("error", (error) => {
-			resolve({
-				roots: [],
-				scannedFiles: 0,
-				indexedSessions: 0,
-				skippedFiles: [{ path: cxsBin, error: error.message }],
-				cxsExitCode: -1,
-			});
+			resolve({ indexedSessions: 0, cxsStdout: error.message, cxsExitCode: -1 });
 		});
 		child.on("close", (code) => {
 			const indexed = parseIndexedCount(stdout) ?? parseIndexedCount(stderr);
 			resolve({
-				roots: [],
-				scannedFiles: 0,
 				indexedSessions: indexed ?? 0,
-				skippedFiles: [],
 				cxsStdout: stdout || stderr,
 				cxsExitCode: code ?? -1,
 			});

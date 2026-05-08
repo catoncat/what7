@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -55,26 +55,12 @@ describe("CxsReader", () => {
 		expect(msgs[3]?.content).toContain("Watermelon");
 	});
 
-	it("search() falls back to LIKE when FTS5 table is missing", () => {
-		const hits = reader.search("watermelon");
-		expect(hits.length).toBeGreaterThan(0);
-		const sessIds = new Set(hits.map((h) => h.session.id));
-		expect(sessIds.has("sess_a")).toBe(true);
-		expect(sessIds.has("sess_c")).toBe(true);
-	});
-
-	it("analytics() aggregates session/message counts and project rollup", () => {
+	it("analytics() aggregates session/project counts", () => {
 		const a = reader.analytics();
 		expect(a.sessionCount).toBe(3);
-		expect(a.messageCount).toBe(4 + 3 + 2);
-		expect(a.userMessageCount).toBe(4);
-		expect(a.assistantMessageCount).toBe(5);
 		expect(a.projectCount).toBe(2);
 		// last 7 days: sess_a (today) + sess_b (2 days ago) — sess_c is 30 days old
 		expect(a.last7dSessionCount).toBe(2);
-		const byProject = Object.fromEntries(a.projects.map((p) => [p.project, p.sessionCount]));
-		expect(byProject.foo).toBe(2);
-		expect(byProject.bar).toBe(1);
 	});
 
 	it("listProjects() groups by cwd with basename slug", () => {

@@ -26,21 +26,22 @@ program
 
 program
   .command("sync")
-  .option("--dir <dir>", "session root to scan; can be repeated", collect, [] as string[])
-  .option("--max-files <n>", "maximum JSONL files to scan", parsePositiveInt)
   .option("--json", "emit stable JSON output")
-  .description("Discover Codex sessions and refresh the local cxs session index.")
-  .action(async (options: { dir: string[]; maxFiles?: number; json?: boolean }) => {
+  .description("Delegate to `cxs sync` to refresh the cxs SQLite index.")
+  .action(async (options: { json?: boolean }) => {
     await run(async () => {
       const globals = program.opts<GlobalOptions>();
-      const result = await syncSessions({ stateDir: globals.stateDir, dirs: options.dir, maxFiles: options.maxFiles });
-      output(options.json || globals.json, {
-        roots: result.roots,
-        scanned_files: result.scannedFiles,
-        indexed_sessions: result.indexedSessions,
-        skipped_files: result.skippedFiles,
-        index_file: new SessionIndexStore(globals.stateDir).file,
-      }, `Synced ${result.indexedSessions}/${result.scannedFiles} sessions into ${new SessionIndexStore(globals.stateDir).file}`);
+      const result = await syncSessions({ stateDir: globals.stateDir });
+      const indexFile = new SessionIndexStore(globals.stateDir).file;
+      output(
+        options.json || globals.json,
+        {
+          indexed_sessions: result.indexedSessions,
+          cxs_exit_code: result.cxsExitCode,
+          index_file: indexFile,
+        },
+        `cxs sync → ${result.indexedSessions} sessions (${indexFile})`,
+      );
     });
   });
 
@@ -144,17 +145,6 @@ function output(asJson: boolean | undefined, payload: unknown, text: string): vo
   const globals = program.opts<GlobalOptions>();
   if (asJson || globals.json) console.log(JSON.stringify(payload, null, 2));
   else console.log(text);
-}
-
-function collect(value: string, previous: string[]): string[] {
-  previous.push(value);
-  return previous;
-}
-
-function parsePositiveInt(value: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`Invalid positive integer: ${value}`);
-  return parsed;
 }
 
 function parsePort(value: string): number {

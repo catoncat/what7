@@ -35,10 +35,7 @@ export interface Session {
   endedAt?: string;
   updatedAt: string;
   model?: string;
-  lineCount: number;
   messageCount: number;
-  userMessageCount: number;
-  assistantMessageCount: number;
   firstMessage: string;
 }
 
@@ -46,7 +43,6 @@ export interface MessageBlock {
   id: string;
   sessionId: string;
   order: number;
-  line: number;
   kind: MessageKind;
   role?: MessageRole;
   timestamp?: string;
