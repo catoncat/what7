@@ -379,11 +379,12 @@ type ProjectPref = {
 
 | 文档 | 状态 |
 |---|---|
-| `docs/handoff-goal.md` | **superseded by this PRD**（IA / CLI 部分）。Worker / state schema / 安全部分仍有效。 |
-| `docs/design-spec.md` | **共存**。S0 token 系统继续用；S2/S3/S4 切片本来绑定旧 `src/dashboard.ts`，新 `web/` 已经按同样 token 重做（commit `56354e2` `a9d659d` `9b6dc8d` `eae30ad`）。 |
+| `docs/handoff-goal.md` | **deleted**。v0 立项书，完全被本 PRD 取代；Worker / state schema / 安全部分已迁入 `docs/design.md` + `docs/deployment.md`。 |
+| `docs/agentsview-reference.md` | **deleted**。灵感参考，相关决策已落在本 PRD + 当前代码里。 |
+| `docs/design.md` | **重写**（M6 cleanup）：实现模块地图，反映当前 M1-M6 架构。 |
+| `docs/design-spec.md` | **更新**（M6 cleanup）：token 分布、字体与 brand-orange 规则；CSS 位置从旧 `src/dashboard.ts` 改为 `web/src/assets/main.css` + `src/renderer.ts`。 |
 | `docs/research.md` | 仍有效，v1 不动。 |
-| `docs/agentsview-reference.md` | 仍有效，作为视觉参考。 |
-| `docs/deployment.md` | 仍有效。 |
+| `docs/deployment.md` | **更新**（M6 cleanup）：CLI 命令对齐保留命令集。 |
 
 ## Appendix B — 决策日志
 
