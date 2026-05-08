@@ -72,6 +72,17 @@ export function fetchProjectSessions(slug: string, params: {
   );
 }
 
+export function updateProject(
+  slug: string,
+  patch: { displayName?: string | null; hidden?: boolean },
+): Promise<Project> {
+  return jsend<{ project: Project }>(
+    `/api/v1/projects/${encodeURIComponent(slug)}`,
+    "PATCH",
+    patch,
+  ).then((r) => r.project);
+}
+
 export function fetchSessionDetail(id: string): Promise<SessionDetailResponse> {
   return jget<SessionDetailResponse>(
     `/api/v1/sessions/${encodeURIComponent(id)}?messages=1`,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, watchEffect } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { fetchProjects } from "@/api/client";
+import { useProjects } from "@/composables/useProjects";
 import { useShortcuts } from "@/composables/useShortcuts";
 import { APP_SHELL_KEY } from "@/shell";
 import type { Project } from "@/types";
@@ -14,7 +14,7 @@ type Theme = "auto" | "light" | "dark";
 const THEME_KEY = "what7-theme";
 const theme = ref<Theme>("auto");
 
-const projects = ref<Project[]>([]);
+const { projects, refresh: refreshProjects } = useProjects();
 const {
   shortcuts,
   refresh: refreshShortcuts,
@@ -27,6 +27,13 @@ const {
   copyUrl,
   isInvalid,
 } = useShortcuts();
+
+const showHidden = ref(false);
+const visibleProjects = computed<Project[]>(() => {
+  if (showHidden.value) return [...projects.value];
+  return projects.value.filter((p) => !p.hidden);
+});
+const hiddenCount = computed(() => projects.value.filter((p) => p.hidden).length);
 
 const totalSessions = computed(() =>
   projects.value.reduce((sum, p) => sum + p.sessionCount, 0),
@@ -45,8 +52,7 @@ const currentProject = computed<Project | null>(() => {
 onMounted(async () => {
   const saved = localStorage.getItem(THEME_KEY) as Theme | null;
   if (saved === "auto" || saved === "light" || saved === "dark") theme.value = saved;
-  const [proj] = await Promise.all([fetchProjects(), refreshShortcuts()]);
-  projects.value = proj;
+  await Promise.all([refreshProjects(), refreshShortcuts()]);
 });
 
 watchEffect(() => {
@@ -121,16 +127,25 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
     <section class="group">
       <h3>Projects</h3>
       <RouterLink
-        v-for="p in projects"
+        v-for="p in visibleProjects"
         :key="p.slug"
         :to="{ name: 'project', params: { slug: p.slug } }"
         :title="p.cwd"
+        :class="{ hidden: p.hidden }"
       >
         <span class="dot"></span>
         <span class="label" v-text="p.displayName ?? p.name"></span>
         <span class="meta" v-text="p.sessionCount"></span>
       </RouterLink>
-      <div v-if="!projects.length" class="hint">No indexed projects yet.</div>
+      <div v-if="!visibleProjects.length" class="hint">No indexed projects yet.</div>
+      <button
+        v-if="hiddenCount > 0"
+        class="toggle-hidden"
+        @click="showHidden = !showHidden"
+      >
+        <span v-if="!showHidden" v-text="`Show hidden (${hiddenCount})`"></span>
+        <span v-else>Hide hidden</span>
+      </button>
     </section>
     <section class="group shortcuts">
       <header class="group-head">
@@ -253,6 +268,19 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
 }
 .group .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .group .hint { color: var(--fg-3); padding: 4px 8px; font-size: 11.5px; }
+.group a.hidden { color: var(--fg-3); opacity: 0.55; }
+.group a.hidden .dot { opacity: 0.4; }
+.toggle-hidden {
+  margin: 4px 8px 0;
+  padding: 4px 8px;
+  color: var(--fg-3);
+  font-size: 11px;
+  background: transparent;
+  border-radius: var(--r-sm);
+  align-self: flex-start;
+  text-align: left;
+}
+.toggle-hidden:hover { background: var(--surface-2); color: var(--fg-2); }
 
 .group.shortcuts { position: relative; }
 .group .group-head {

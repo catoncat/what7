@@ -2,14 +2,23 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
 import AppLayout from "@/layouts/AppLayout.vue";
 import ReadingEmpty from "@/views/ReadingEmpty.vue";
 import ReadingPane from "@/views/ReadingPane.vue";
-import PlaceholderPane from "@/views/PlaceholderPane.vue";
+
+function resolveDefaultLanding(): string {
+  if (typeof window === "undefined") return "/recent";
+  const choice = window.localStorage.getItem("what7-default-landing");
+  if (choice === "last-active") {
+    const slug = window.localStorage.getItem("what7-last-active-slug");
+    if (slug) return `/p/${encodeURIComponent(slug)}`;
+  }
+  return "/recent";
+}
 
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
     component: AppLayout,
     children: [
-      { path: "", redirect: { name: "recent" } },
+      { path: "", redirect: () => resolveDefaultLanding() },
       {
         path: "recent",
         name: "recent",
@@ -62,15 +71,22 @@ const routes: RouteRecordRaw[] = [
       {
         path: "published",
         name: "published",
-        components: { reading: PlaceholderPane },
-        props: { reading: () => ({ title: "Published", hint: "Alias for /recent?shared=1. Wires up alongside search in M4." }) },
+        components: { reading: ReadingEmpty },
+        props: { reading: () => ({ kind: "published" }) },
+        meta: { kind: "published" },
+      },
+      {
+        path: "published/:id",
+        name: "published.session",
+        components: { reading: ReadingPane },
+        props: { reading: true },
         meta: { kind: "published" },
       },
       {
         path: "settings",
         name: "settings",
-        components: { reading: PlaceholderPane },
-        props: { reading: () => ({ title: "Settings", hint: "Project aliases + default landing land in M4.3." }) },
+        components: { reading: ReadingEmpty },
+        props: { reading: () => ({ kind: "settings" }) },
         meta: { kind: "settings" },
       },
     ],

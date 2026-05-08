@@ -4,13 +4,15 @@ import { useRoute } from "vue-router";
 import NavSidebar from "@/components/NavSidebar.vue";
 import SessionList from "@/components/SessionList.vue";
 import SearchView from "@/views/SearchView.vue";
-import { fetchProjects, fetchProjectSessions, fetchSessions } from "@/api/client";
+import SettingsView from "@/views/SettingsView.vue";
+import { fetchProjectSessions, fetchSessions } from "@/api/client";
+import { useProjects } from "@/composables/useProjects";
 import { APP_SHELL_KEY, type AppShell } from "@/shell";
-import type { Project, Session } from "@/types";
+import type { Session } from "@/types";
 
 const route = useRoute();
 
-type FilterKind = "recent" | "project" | "search" | "published";
+type FilterKind = "recent" | "project" | "search" | "published" | "settings";
 interface Filter {
   kind: FilterKind;
   slug?: string;
@@ -36,11 +38,12 @@ const filter = computed<Filter>(() => {
   if (meta?.kind === "published") {
     return { kind: "published", since: q.since, project: q.project, shared: true };
   }
+  if (meta?.kind === "settings") return { kind: "settings" };
   return { kind: "recent" };
 });
 
 const sessions = ref<Session[]>([]);
-const projects = ref<Project[]>([]);
+const { projects, refresh: refreshProjects } = useProjects();
 const loading = ref(false);
 
 async function loadSessions(f: Filter) {
@@ -92,7 +95,7 @@ function sinceToIso(since: string): string {
 watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
 
 onMounted(async () => {
-  projects.value = await fetchProjects();
+  await refreshProjects();
 });
 
 const listTitle = computed<string>(() => {
@@ -146,6 +149,22 @@ onUnmounted(() => {
 
 watch(() => route.fullPath, () => { navOpen.value = false; });
 
+// Track last active project slug for `Default landing = last-active`.
+watch(
+  () => route.params.slug,
+  (slug) => {
+    if (!slug) return;
+    const value = Array.isArray(slug) ? slug[0] : slug;
+    if (!value) return;
+    try {
+      window.localStorage.setItem("what7-last-active-slug", value);
+    } catch {
+      // ignore SSR / private-mode failures
+    }
+  },
+  { immediate: true },
+);
+
 const shell: AppShell = {
   isMobile,
   navOpen,
@@ -161,8 +180,9 @@ provide(APP_SHELL_KEY, shell);
     :class="{ 'is-mobile': isMobile, 'show-reading': !!activeId, 'nav-open': navOpen }"
   >
     <NavSidebar />
+    <SettingsView v-if="filter.kind === 'settings'" />
     <SearchView
-      v-if="filter.kind === 'search'"
+      v-else-if="filter.kind === 'search' || filter.kind === 'published'"
       :projects="projects"
       :sessions="sessions"
       :loading="loading"
@@ -240,7 +260,7 @@ provide(APP_SHELL_KEY, shell);
     border-right: 1px solid var(--line);
   }
   .app.nav-open .nav { transform: translateX(0); }
-  .app .list, .app .search { display: flex; }
-  .app.show-reading .list, .app.show-reading .search { display: none; }
+  .app .list, .app .search, .app .settings { display: flex; }
+  .app.show-reading .list, .app.show-reading .search, .app.show-reading .settings { display: none; }
 }
 </style>

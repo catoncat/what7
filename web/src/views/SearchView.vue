@@ -9,8 +9,8 @@ const route = useRoute();
 const router = useRouter();
 
 defineProps<{
-  projects: Project[];
-  sessions: Session[];
+  projects: readonly Project[];
+  sessions: readonly Session[];
   loading: boolean;
   query: string;
   snippets?: Record<string, string>;
