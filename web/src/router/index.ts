@@ -48,8 +48,15 @@ const routes: RouteRecordRaw[] = [
       {
         path: "search",
         name: "search",
-        components: { reading: PlaceholderPane },
-        props: { reading: () => ({ title: "Search", hint: "Coming in M4.2 — filter chip bar + session-level hits." }) },
+        components: { reading: ReadingEmpty },
+        props: { reading: () => ({ kind: "search" }) },
+        meta: { kind: "search" },
+      },
+      {
+        path: "search/:id",
+        name: "search.session",
+        components: { reading: ReadingPane },
+        props: { reading: true },
         meta: { kind: "search" },
       },
       {

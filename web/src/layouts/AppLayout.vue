@@ -3,42 +3,97 @@ import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import NavSidebar from "@/components/NavSidebar.vue";
 import SessionList from "@/components/SessionList.vue";
-import { fetchProjectSessions, fetchSessions } from "@/api/client";
+import SearchView from "@/views/SearchView.vue";
+import { fetchProjects, fetchProjectSessions, fetchSessions } from "@/api/client";
 import { APP_SHELL_KEY, type AppShell } from "@/shell";
-import type { Session } from "@/types";
+import type { Project, Session } from "@/types";
 
 const route = useRoute();
 
+type FilterKind = "recent" | "project" | "search" | "published";
 interface Filter {
-  kind: "recent" | "project";
+  kind: FilterKind;
   slug?: string;
+  q?: string;
+  since?: string;
+  project?: string;
+  shared?: boolean;
 }
 
 const filter = computed<Filter>(() => {
   const meta = route.meta as { kind?: string };
+  const q = (route.query ?? {}) as Record<string, string>;
   if (meta?.kind === "project") return { kind: "project", slug: String(route.params.slug ?? "") };
+  if (meta?.kind === "search") {
+    return {
+      kind: "search",
+      q: q.q,
+      since: q.since,
+      project: q.project,
+      shared: q.shared === "1",
+    };
+  }
+  if (meta?.kind === "published") {
+    return { kind: "published", since: q.since, project: q.project, shared: true };
+  }
   return { kind: "recent" };
 });
 
 const sessions = ref<Session[]>([]);
+const projects = ref<Project[]>([]);
 const loading = ref(false);
 
 async function loadSessions(f: Filter) {
-  if (f.kind !== "recent" && f.kind !== "project") {
-    // /search, /published, /settings: SessionList stays empty for now (M4).
-    sessions.value = [];
+  if (f.kind === "recent") {
+    loading.value = true;
+    const result = await fetchSessions({ limit: 100 });
+    sessions.value = result.sessions;
     loading.value = false;
     return;
   }
-  loading.value = true;
-  const result = f.kind === "project" && f.slug
-    ? await fetchProjectSessions(f.slug, { limit: 100 })
-    : await fetchSessions({ limit: 100 });
-  sessions.value = result.sessions;
+  if (f.kind === "project" && f.slug) {
+    loading.value = true;
+    const result = await fetchProjectSessions(f.slug, { limit: 100 });
+    sessions.value = result.sessions;
+    loading.value = false;
+    return;
+  }
+  if (f.kind === "search" || f.kind === "published") {
+    // Only fetch when at least one signal is set, otherwise show empty hint.
+    const hasSignal =
+      f.kind === "published" || Boolean(f.q || f.since || f.project || f.shared);
+    if (!hasSignal) {
+      sessions.value = [];
+      loading.value = false;
+      return;
+    }
+    loading.value = true;
+    const result = await fetchSessions({
+      limit: 100,
+      ...(f.q ? { q: f.q } : {}),
+      ...(f.since ? { since: sinceToIso(f.since) } : {}),
+      ...(f.project ? { project: f.project } : {}),
+      ...(f.shared ? { shared: 1 } : {}),
+    });
+    sessions.value = result.sessions;
+    loading.value = false;
+    return;
+  }
+  sessions.value = [];
   loading.value = false;
 }
 
-watch(filter, (f) => loadSessions(f), { immediate: true });
+function sinceToIso(since: string): string {
+  const days = since === "1d" ? 1 : since === "7d" ? 7 : since === "30d" ? 30 : 0;
+  if (!days) return since;
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
+
+onMounted(async () => {
+  projects.value = await fetchProjects();
+});
 
 const listTitle = computed<string>(() => {
   if (filter.value.kind === "project") {
@@ -46,11 +101,8 @@ const listTitle = computed<string>(() => {
     return first ? `Project · ${first.project}` : `Project`;
   }
   if (filter.value.kind === "recent") return "Recent";
-  // For search / published / settings the SessionList still renders (empty),
-  // but the title reflects the active section.
+  if (filter.value.kind === "published") return "Published";
   const meta = route.meta as { kind?: string };
-  if (meta?.kind === "search") return "Search";
-  if (meta?.kind === "published") return "Published";
   if (meta?.kind === "settings") return "Settings";
   return "Recent";
 });
@@ -63,6 +115,14 @@ const activeId = computed(() => {
 const buildLink = (sessionId: string): string => {
   const f = filter.value;
   if (f.kind === "project") return `/p/${f.slug}/${sessionId}`;
+  if (f.kind === "search") {
+    const qs = new URLSearchParams(route.query as Record<string, string>).toString();
+    return `/search/${sessionId}${qs ? `?${qs}` : ""}`;
+  }
+  if (f.kind === "published") {
+    // No /published/:id route yet (M4.4); reuse the session direct-link.
+    return `/s/${sessionId}`;
+  }
   return `/recent/${sessionId}`;
 };
 
@@ -101,7 +161,15 @@ provide(APP_SHELL_KEY, shell);
     :class="{ 'is-mobile': isMobile, 'show-reading': !!activeId, 'nav-open': navOpen }"
   >
     <NavSidebar />
+    <SearchView
+      v-if="filter.kind === 'search'"
+      :projects="projects"
+      :sessions="sessions"
+      :loading="loading"
+      :query="filter.q ?? ''"
+    />
     <SessionList
+      v-else
       :title="listTitle"
       :sessions="sessions"
       :active-id="activeId"
@@ -172,7 +240,7 @@ provide(APP_SHELL_KEY, shell);
     border-right: 1px solid var(--line);
   }
   .app.nav-open .nav { transform: translateX(0); }
-  .app .list { display: flex; }
-  .app.show-reading .list { display: none; }
+  .app .list, .app .search { display: flex; }
+  .app.show-reading .list, .app.show-reading .search { display: none; }
 }
 </style>

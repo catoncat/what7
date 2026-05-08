@@ -49,6 +49,8 @@ export function fetchSessions(params: {
   q?: string;
   since?: string;
   until?: string;
+  project?: string;
+  shared?: 1;
 } = {}): Promise<SessionPage> {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined) sp.set(k, String(v));

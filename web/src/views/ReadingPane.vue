@@ -37,6 +37,10 @@ const listPath = computed<string>(() => {
   const meta = route.meta as { kind?: string };
   const slug = String(route.params.slug ?? "");
   if (meta?.kind === "project") return `/p/${slug}`;
+  if (meta?.kind === "search") {
+    const qs = new URLSearchParams(route.query as Record<string, string>).toString();
+    return `/search${qs ? `?${qs}` : ""}`;
+  }
   if (meta?.kind === "session") return "/recent";
   return "/recent";
 });
