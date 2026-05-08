@@ -243,11 +243,3 @@ function parseIndexedCount(text: string): number | undefined {
 	const n = Number(match[1]);
 	return Number.isFinite(n) ? n : undefined;
 }
-
-// =============================================================================
-// Legacy helpers — kept as no-ops only for downstream surface compat.
-// =============================================================================
-
-export function defaultSessionRoots(): string[] {
-	return [];
-}

@@ -107,24 +107,19 @@ program
     });
   });
 
-function addDashboardCommand(name: "dashboard" | "serve"): void {
-  program
-    .command(name)
-    .option("--port <port>", "local dashboard port", parsePort)
-    .option("--no-open", "do not open browser")
-    .option("--json", "emit server URL as JSON")
-    .description("Start the local workbench: browse cxs-indexed sessions, preview transcripts, share/unpublish.")
-    .action(async (options: { port?: number; open?: boolean; json?: boolean }) => {
-      await run(async () => {
-        const globals = program.opts<GlobalOptions>();
-        const handle = await startDashboard({ stateDir: globals.stateDir, port: options.port ?? 0, open: options.open !== false });
-        output(options.json || globals.json, { url: handle.url }, `Dashboard: ${handle.url}\nPress Ctrl-C to stop.`);
-      });
+program
+  .command("serve")
+  .option("--port <port>", "local dashboard port", parsePort)
+  .option("--no-open", "do not open browser")
+  .option("--json", "emit server URL as JSON")
+  .description("Start the local workbench: browse cxs-indexed sessions, preview transcripts, share/unpublish.")
+  .action(async (options: { port?: number; open?: boolean; json?: boolean }) => {
+    await run(async () => {
+      const globals = program.opts<GlobalOptions>();
+      const handle = await startDashboard({ stateDir: globals.stateDir, port: options.port ?? 0, open: options.open !== false });
+      output(options.json || globals.json, { url: handle.url }, `Dashboard: ${handle.url}\nPress Ctrl-C to stop.`);
     });
-}
-
-addDashboardCommand("dashboard");
-addDashboardCommand("serve");
+  });
 
 program.exitOverride();
 
