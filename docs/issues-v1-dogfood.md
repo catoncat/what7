@@ -14,7 +14,7 @@
 | I-02 | ReadingPane 不渲染 markdown | P0 | ✅ 已修（markdown-it + DOMPurify） | int_c7ecb7be |
 | I-03 | 点击 session 时 list 闪 Loading | P1 | ✅ 已修（vue-query 接管） | int_bbcfbe59 |
 | I-04 | Projects 不折叠 top-N | P1 | ✅ 已修 | int_11c01f18 |
-| I-05 | Share / Copy link 按钮没绑 | P1 | 🔴 待做 | — |
+| I-05 | Share / Copy link 按钮没绑 | P1 | ✅ 已修 | int_839101c3 |
 | I-06 | 顶部搜索框 disabled + ⌘K 假 | P1 | ✅ 已修 | int_2e120094 |
 | I-07 | 噪声 session (ping/no title) | P1 | 🟡 待观察 | — |
 | I-08 | cx agent badge 无信息量 | P1 | ✅ 已修 | int_2e120094 |
