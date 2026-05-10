@@ -2,6 +2,7 @@
 import { computed, inject, toRef } from "vue";
 import { useRoute } from "vue-router";
 import { useSessionDetailQuery } from "@/queries";
+import { renderMarkdown } from "@/utils/markdown";
 import { APP_SHELL_KEY } from "@/shell";
 import type { MessageBlock, Session } from "@/types";
 
@@ -77,7 +78,7 @@ function msgRoleClass(m: MessageBlock): string {
           <span v-text="msgRoleLabel(m)"></span>
           <span v-if="m.toolName" class="tool-name" v-text="m.toolName"></span>
         </div>
-        <div class="content" v-text="m.content"></div>
+        <div class="content" v-html="renderMarkdown(m.content)"></div>
       </div>
       <div v-if="!messages.length" class="empty">No messages.</div>
     </div>
@@ -156,9 +157,81 @@ function msgRoleClass(m: MessageBlock): string {
 }
 .msg .role .tool-name { color: var(--accent); text-transform: none; }
 .msg .content {
-  white-space: pre-wrap;
   font-size: 13.5px; line-height: 1.65;
   color: var(--fg);
+}
+.msg .content > :first-child { margin-top: 0; }
+.msg .content > :last-child { margin-bottom: 0; }
+.msg .content p { margin: 0 0 10px; }
+.msg .content strong { font-weight: 600; }
+.msg .content em { font-style: italic; }
+.msg .content del { text-decoration: line-through; color: var(--fg-3); }
+.msg .content a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.msg .content a:hover { text-decoration-thickness: 2px; }
+.msg .content h1, .msg .content h2, .msg .content h3,
+.msg .content h4, .msg .content h5, .msg .content h6 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--fg);
+}
+.msg .content h1 { font-size: 18px; }
+.msg .content h2 { font-size: 16px; }
+.msg .content h3 { font-size: 14.5px; }
+.msg .content h4, .msg .content h5, .msg .content h6 { font-size: 13.5px; }
+.msg .content ul, .msg .content ol {
+  margin: 0 0 10px; padding-left: 22px;
+}
+.msg .content li { margin: 3px 0; }
+.msg .content li > p { margin: 0 0 4px; }
+.msg .content blockquote {
+  margin: 0 0 10px; padding: 4px 12px;
+  border-left: 3px solid var(--line-strong);
+  color: var(--fg-2);
+}
+.msg .content hr {
+  border: 0; border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
+.msg .content code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.msg .content pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+  font-size: 12px; line-height: 1.55;
+}
+.msg .content pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+.msg .content table {
+  border-collapse: collapse;
+  margin: 0 0 10px;
+  font-size: 12.5px;
+}
+.msg .content th, .msg .content td {
+  border: 1px solid var(--line);
+  padding: 4px 8px; text-align: left;
+}
+.msg .content th { background: var(--surface); font-weight: 600; }
+.msg .content img { max-width: 100%; border-radius: var(--r-sm); }
+.msg .content kbd {
+  font-family: var(--font-mono); font-size: 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px; padding: 1px 5px;
+  background: var(--surface-2); color: var(--fg);
 }
 .msg-tool .content,
 .msg-tool_call .content,
@@ -169,6 +242,7 @@ function msgRoleClass(m: MessageBlock): string {
   border-radius: var(--r-md);
   padding: 10px 12px;
   color: var(--fg-2);
+  white-space: pre-wrap;
 }
 .msg-reasoning .content {
   color: var(--fg-3);
