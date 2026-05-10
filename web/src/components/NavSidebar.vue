@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watchEffect } from "vue";
+import { computed, inject, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useProjects } from "@/composables/useProjects";
 import { useShortcuts } from "@/composables/useShortcuts";
@@ -55,6 +55,25 @@ onMounted(async () => {
   await Promise.all([refreshProjects(), refreshShortcuts()]);
 });
 
+// Global ⌘K / Ctrl+K → jump to /search
+function onGlobalKeydown(ev: KeyboardEvent) {
+  if (ev.key !== "k" || !(ev.metaKey || ev.ctrlKey)) return;
+  const target = ev.target as HTMLElement | null;
+  // Respect focus in text editors / inputs so the shortcut doesn't hijack typing.
+  const tag = target?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+  ev.preventDefault();
+  router.push({ name: "search" });
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", onGlobalKeydown);
+  onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
+}
+
+function openSearch() {
+  router.push({ name: "search" });
+}
+
 watchEffect(() => {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -109,10 +128,10 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
         @click.stop="shell?.closeNav()"
       >×</button>
     </header>
-    <div class="search">
-      <input placeholder="Search sessions" disabled />
+    <button class="search" type="button" aria-label="Jump to search" @click="openSearch">
+      <span class="placeholder">Search sessions</span>
       <kbd>⌘K</kbd>
-    </div>
+    </button>
     <nav class="primary">
       <RouterLink :to="{ name: 'recent' }">
         <span>Recent</span><span class="meta" v-text="totalSessions"></span>
@@ -227,11 +246,13 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
 
 .search {
   display: flex; align-items: center; gap: 6px;
+  width: 100%;
   background: var(--surface-2); border: 1px solid var(--line);
   border-radius: var(--r-md); padding: 5px 8px; margin-bottom: 12px;
+  cursor: pointer; color: var(--fg-3); text-align: left;
 }
-.search input { flex: 1; background: transparent; border: 0; outline: 0; color: var(--fg); font-size: 12.5px; }
-.search input::placeholder { color: var(--fg-3); }
+.search:hover { border-color: var(--line-strong); color: var(--fg-2); }
+.search .placeholder { flex: 1; font-size: 12.5px; }
 .search kbd {
   font-family: var(--font-mono); font-size: 10px; color: var(--fg-3);
   border: 1px solid var(--line); padding: 1px 4px; border-radius: 3px;

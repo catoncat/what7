@@ -16,9 +16,7 @@ const message = computed(() => {
       <h1>what7 workbench</h1>
       <p v-text="message"></p>
       <ul>
-        <li><kbd>↑</kbd><kbd>↓</kbd> navigate the list</li>
         <li><kbd>⌘K</kbd> jump to search</li>
-        <li><kbd>S</kbd> share the active session</li>
       </ul>
     </div>
   </div>

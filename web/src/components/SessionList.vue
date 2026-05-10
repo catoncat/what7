@@ -62,10 +62,6 @@ function metaLine(s: Session): string {
   if (s.model) parts.push(s.model);
   return parts.join(" · ");
 }
-
-function agentGlyph(s: Session): string {
-  return s.agent === "codex" ? "cx" : s.agent;
-}
 </script>
 
 <template>
@@ -91,7 +87,6 @@ function agentGlyph(s: Session): string {
         class="row"
         :class="{ active: s.id === activeId }"
       >
-        <span class="glyph" v-text="agentGlyph(s)"></span>
         <div class="body">
           <div class="title" v-text="s.title"></div>
           <div class="meta">
@@ -156,13 +151,6 @@ function agentGlyph(s: Session): string {
 .row.active {
   background: var(--surface-2); color: var(--fg);
   border-left-color: var(--accent);
-}
-.row .glyph {
-  width: 18px; height: 18px; border-radius: 4px;
-  display: grid; place-items: center; flex: 0 0 auto;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  margin-top: 1px;
-  background: var(--surface-2); color: var(--fg-2);
 }
 .row .body { flex: 1; min-width: 0; }
 .row .title {

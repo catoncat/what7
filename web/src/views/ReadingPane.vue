@@ -36,7 +36,7 @@ function formatTime(iso: string | undefined): string {
 
 function headLine(s: Session): string {
   const time = formatTime(s.endedAt ?? s.startedAt);
-  const parts: string[] = [s.id.slice(0, 8), s.project, s.agent, `${s.messageCount} msgs`];
+  const parts: string[] = [s.project, `${s.messageCount} msgs`];
   if (s.model) parts.push(s.model);
   if (time) parts.push(time);
   return parts.join(" · ");
