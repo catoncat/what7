@@ -28,12 +28,63 @@ const {
   isInvalid,
 } = useShortcuts();
 
+const TOP_N = 12;
+
 const showHidden = ref(false);
-const visibleProjects = computed<Project[]>(() => {
-  if (showHidden.value) return [...projects.value];
-  return projects.value.filter((p) => !p.hidden);
+
+/**
+ * Slugs that must be shown regardless of top-N truncation:
+ * - the currently active project route
+ * - any project referenced by a shortcut URL /p/:slug[/...]
+ */
+const pinnedSlugs = computed<Set<string>>(() => {
+  const set = new Set<string>();
+  const currentSlug = route.params.slug;
+  if (currentSlug) set.add(Array.isArray(currentSlug) ? currentSlug[0]! : String(currentSlug));
+  for (const sc of shortcuts.value) {
+    const m = sc.url.match(/^\/p\/([^/?#]+)/);
+    if (m?.[1]) set.add(decodeURIComponent(m[1]));
+  }
+  return set;
 });
-const hiddenCount = computed(() => projects.value.filter((p) => p.hidden).length);
+
+interface ProjectPartition {
+  primary: Project[];    // top-N (by sessionCount) + pinned
+  overflow: Project[];   // the rest (collapsed in <details>)
+  hiddenCount: number;
+}
+
+const projectsSorted = computed<Project[]>(() =>
+  [...projects.value].sort((a, b) => (b.sessionCount ?? 0) - (a.sessionCount ?? 0)),
+);
+
+const projectPartition = computed<ProjectPartition>(() => {
+  const hiddenCount = projects.value.filter((p) => p.hidden).length;
+  const candidates = showHidden.value
+    ? projectsSorted.value
+    : projectsSorted.value.filter((p) => !p.hidden);
+
+  const pinned = pinnedSlugs.value;
+
+  // top-N by sessionCount, then fold the rest; pinned always join primary.
+  const primary: Project[] = [];
+  const overflow: Project[] = [];
+  const pinnedExtras: Project[] = [];
+
+  for (const p of candidates) {
+    if (primary.length < TOP_N) {
+      primary.push(p);
+    } else if (pinned.has(p.slug)) {
+      pinnedExtras.push(p);
+    } else {
+      overflow.push(p);
+    }
+  }
+  // Append pinned extras at the end of primary so top-N order is preserved.
+  return { primary: [...primary, ...pinnedExtras], overflow, hiddenCount };
+});
+
+const hiddenCount = computed(() => projectPartition.value.hiddenCount);
 
 const totalSessions = computed(() =>
   projects.value.reduce((sum, p) => sum + p.sessionCount, 0),
@@ -146,7 +197,7 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
     <section class="group">
       <h3>Projects</h3>
       <RouterLink
-        v-for="p in visibleProjects"
+        v-for="p in projectPartition.primary"
         :key="p.slug"
         :to="{ name: 'project', params: { slug: p.slug } }"
         :title="p.cwd"
@@ -156,7 +207,23 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
         <span class="label" v-text="p.displayName ?? p.name"></span>
         <span class="meta" v-text="p.sessionCount"></span>
       </RouterLink>
-      <div v-if="!visibleProjects.length" class="hint">No indexed projects yet.</div>
+      <details v-if="projectPartition.overflow.length" class="overflow">
+        <summary>
+          <span v-text="`Show ${projectPartition.overflow.length} more`"></span>
+        </summary>
+        <RouterLink
+          v-for="p in projectPartition.overflow"
+          :key="p.slug"
+          :to="{ name: 'project', params: { slug: p.slug } }"
+          :title="p.cwd"
+          :class="{ hidden: p.hidden }"
+        >
+          <span class="dot"></span>
+          <span class="label" v-text="p.displayName ?? p.name"></span>
+          <span class="meta" v-text="p.sessionCount"></span>
+        </RouterLink>
+      </details>
+      <div v-if="!projectPartition.primary.length" class="hint">No indexed projects yet.</div>
       <button
         v-if="hiddenCount > 0"
         class="toggle-hidden"
@@ -302,6 +369,25 @@ async function onClickShortcut(ev: MouseEvent, id: string, url: string) {
   text-align: left;
 }
 .toggle-hidden:hover { background: var(--surface-2); color: var(--fg-2); }
+
+.group .overflow { margin-top: 2px; }
+.group .overflow > summary {
+  list-style: none;
+  padding: 4px 8px;
+  color: var(--fg-3);
+  font-size: 11px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.group .overflow > summary::-webkit-details-marker { display: none; }
+.group .overflow > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  margin-right: 2px;
+  transition: transform 120ms ease;
+}
+.group .overflow[open] > summary::before { transform: rotate(90deg); }
+.group .overflow > summary:hover { background: var(--surface-2); color: var(--fg-2); }
 
 .group.shortcuts { position: relative; }
 .group .group-head {
