@@ -4,8 +4,8 @@ import path from "node:path";
 
 /**
  * Build a fixture SQLite db that mirrors the columns CxsReader reads from the
- * real cxs index. We intentionally omit the FTS5 virtual tables so that
- * CxsReader.search() exercises its LIKE fallback branch.
+ * real cxs index. By default we omit the FTS5 virtual tables so CxsReader's
+ * LIKE fallback is exercised; pass `withFts5: true` to build the FTS5 path.
  *
  * Returns the absolute db path. The caller is responsible for cleaning up
  * the temp directory if needed.
@@ -30,7 +30,16 @@ export interface FixtureBuildResult {
 	sessions: FixtureSession[];
 }
 
-export function buildCxsFixture(dir: string, sessions: FixtureSession[]): FixtureBuildResult {
+export interface FixtureOptions {
+	/** Build the contentless FTS5 virtual table to exercise the FTS5 path. */
+	withFts5?: boolean;
+}
+
+export function buildCxsFixture(
+	dir: string,
+	sessions: FixtureSession[],
+	options: FixtureOptions = {},
+): FixtureBuildResult {
 	fs.mkdirSync(dir, { recursive: true });
 	const dbPath = path.join(dir, "cxs-fixture.sqlite");
 	if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
@@ -63,6 +72,19 @@ export function buildCxsFixture(dir: string, sessions: FixtureSession[]): Fixtur
 		CREATE INDEX idx_messages_session ON messages(session_uuid);
 	`);
 
+	if (options.withFts5) {
+		db.exec(`
+			CREATE VIRTUAL TABLE messages_fts USING fts5(
+				content_text,
+				session_uuid UNINDEXED,
+				seq UNINDEXED,
+				role UNINDEXED,
+				timestamp UNINDEXED,
+				tokenize='unicode61 remove_diacritics 1'
+			);
+		`);
+	}
+
 	const insertSession = db.prepare(`
 		INSERT INTO sessions (session_uuid, file_path, title, cwd, model, started_at, ended_at,
 		                      message_count, raw_file_size, raw_file_mtime, summary_text, compact_text)
@@ -73,6 +95,12 @@ export function buildCxsFixture(dir: string, sessions: FixtureSession[]): Fixtur
 		INSERT INTO messages (session_uuid, seq, role, content_text, timestamp)
 		VALUES (?, ?, ?, ?, ?)
 	`);
+	const insertFts = options.withFts5
+		? db.prepare(`
+			INSERT INTO messages_fts (content_text, session_uuid, seq, role, timestamp)
+			VALUES (?, ?, ?, ?, ?)
+		`)
+		: null;
 
 	const tx = db.transaction((batch: FixtureSession[]) => {
 		for (const s of batch) {
@@ -92,6 +120,7 @@ export function buildCxsFixture(dir: string, sessions: FixtureSession[]): Fixtur
 			});
 			for (const m of s.messages) {
 				insertMessage.run(s.session_uuid, m.seq, m.role, m.content_text, m.timestamp);
+				if (insertFts) insertFts.run(m.content_text, s.session_uuid, m.seq, m.role, m.timestamp);
 			}
 		}
 	});

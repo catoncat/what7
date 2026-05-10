@@ -13,10 +13,25 @@ defineProps<{
   sessions: readonly Session[];
   loading: boolean;
   query: string;
-  snippets?: Record<string, string>;
 }>();
 
 type Since = "" | "1d" | "7d" | "30d";
+
+/**
+ * Render a FTS5 snippet (`«match»` style) with the wrapped segments styled.
+ * Input is trusted: it comes from our own backend's snippet() or LIKE builder
+ * which always escapes the raw content via SQLite's TEXT binding; we only
+ * substitute « / » into <mark>.
+ */
+function highlightSnippet(raw: string): string {
+  const escaped = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped
+    .replace(/«/g, "<mark>")
+    .replace(/»/g, "</mark>");
+}
 
 const since = computed<Since>(() => {
   const raw = route.query.since;
@@ -103,7 +118,7 @@ function onInput(ev: Event) {
             <span v-text="`${s.messageCount} msgs`"></span>
             <span v-if="s.endedAt" v-text="new Date(s.endedAt).toLocaleDateString()"></span>
           </div>
-          <p v-if="snippets && snippets[s.id]" class="snippet" v-text="snippets[s.id]"></p>
+          <p v-if="s.snippet" class="snippet" v-html="highlightSnippet(s.snippet)"></p>
           <p v-else-if="s.firstMessage" class="snippet" v-text="s.firstMessage"></p>
         </RouterLink>
       </li>
@@ -191,5 +206,11 @@ select {
   overflow: hidden; text-overflow: ellipsis;
   display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+.hit .snippet mark {
+  background: var(--brand-soft);
+  color: var(--brand);
+  padding: 0 2px;
+  border-radius: 2px;
 }
 </style>

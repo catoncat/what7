@@ -37,6 +37,10 @@ export interface Session {
   model?: string;
   messageCount: number;
   firstMessage: string;
+  /** Present only on /api/v1/sessions?q= responses (FTS5 hits). */
+  snippet?: string;
+  /** Present only on /api/v1/sessions?q= responses (seq of the best-ranked message). */
+  bestSeq?: number;
 }
 
 export interface MessageBlock {

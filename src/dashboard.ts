@@ -111,6 +111,32 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
           cwd = project.cwd;
         }
 
+        // Full-text search path: non-empty `q` dispatches to FTS5 over
+        // message bodies instead of the metadata LIKE in list(). Snippets
+        // ride on the session payload so the frontend can render them.
+        if (q && q.trim()) {
+          const hits = await sessionStore.searchMessages(q, {
+            ...(cwd ? { cwd } : {}),
+            ...(since ? { since } : {}),
+            ...(until ? { until } : {}),
+            limit: MAX_PAGE_LIMIT,
+          });
+          let enriched = hits.map((h) => ({
+            ...h.session,
+            snippet: h.snippet,
+            bestSeq: h.bestSeq,
+          }));
+          if (sharedOnly) {
+            const published = (await publishStore.list()).filter((r) => r.status === "published");
+            const publishedPaths = new Set(published.map((r) => r.sourcePath));
+            enriched = enriched.filter((s) => publishedPaths.has(s.sourcePath));
+          }
+          return sendJson(res, {
+            sessions: enriched.slice(offset, offset + limit),
+            page: { limit, offset, has_more: enriched.length > offset + limit },
+          });
+        }
+
         if (sharedOnly) {
           // Shared is a low-cardinality overlay (usually <100 records).
           // Join in-app: fetch full filtered list, keep only those whose
@@ -118,7 +144,6 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
           const published = (await publishStore.list()).filter((r) => r.status === "published");
           const publishedPaths = new Set(published.map((r) => r.sourcePath));
           const matched = await sessionStore.list({
-            query: q,
             since,
             until,
             ...(cwd ? { cwd } : {}),
@@ -133,7 +158,6 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
         }
 
         const sessions = await sessionStore.list({
-          query: q,
           since,
           until,
           ...(cwd ? { cwd } : {}),

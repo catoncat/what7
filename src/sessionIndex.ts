@@ -44,6 +44,17 @@ export interface ListSessionFilters {
 }
 
 /**
+ * One message-level hit from full-text search, rolled up to session level.
+ * `snippet` already wraps the match in `«…»` via FTS5 snippet(). `bestSeq`
+ * is the message seq with the highest rank so callers can deep-link into it.
+ */
+export interface SearchHit {
+	session: ManagedSession;
+	snippet: string;
+	bestSeq: number;
+}
+
+/**
  * One project = one distinct cwd in the cxs index.
  * `slug` is the URL-safe short identifier derived by `src/projects.ts`.
  */
@@ -103,6 +114,10 @@ export class SessionIndexStore {
 
 	async list(filters: ListSessionFilters = {}): Promise<ManagedSession[]> {
 		return this.reader.list(filters);
+	}
+
+	async searchMessages(q: string, filters: ListSessionFilters = {}): Promise<SearchHit[]> {
+		return this.reader.searchMessages(q, filters);
 	}
 
 	async find(idOrPath: string): Promise<ManagedSession | undefined> {

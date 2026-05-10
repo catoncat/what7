@@ -77,4 +77,58 @@ describe("CxsReader", () => {
 		expect(foo?.cwd).toBe("/Users/test/repos/foo");
 		expect(reader.findProjectBySlug("nope")).toBeUndefined();
 	});
+
+	it("searchMessages() LIKE fallback finds the right session and wraps snippet", () => {
+		const hits = reader.searchMessages("watermelon");
+		const ids = hits.map((h) => h.session.id).sort();
+		expect(ids).toEqual(["sess_a", "sess_c"]);
+		// Snippet wraps match with «…»
+		const sessA = hits.find((h) => h.session.id === "sess_a")!;
+		expect(sessA.snippet).toMatch(/«[Ww]atermelon»/);
+	});
+
+	it("searchMessages() returns [] for empty query", () => {
+		expect(reader.searchMessages("")).toEqual([]);
+		expect(reader.searchMessages("   ")).toEqual([]);
+	});
+
+	it("searchMessages() respects cwd filter", () => {
+		const hits = reader.searchMessages("watermelon", { cwd: "/Users/test/repos/foo" });
+		expect(hits.map((h) => h.session.id)).toEqual(["sess_a"]);
+	});
+});
+
+describe("CxsReader FTS5", () => {
+	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "what7-cxs-fts5-"));
+	const { dbPath } = buildCxsFixture(tmpDir, sampleSessions(), { withFts5: true });
+	const reader = new CxsReader(dbPath);
+
+	afterAll(() => {
+		reader.close();
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("searchMessages() uses messages_fts when available", () => {
+		const hits = reader.searchMessages("watermelon");
+		expect(hits.length).toBeGreaterThan(0);
+		// FTS5 snippet() wraps with «…»
+		expect(hits[0]?.snippet).toMatch(/«[Ww]atermelon»/);
+	});
+
+	it("searchMessages() only matches message content, not session metadata", () => {
+		// `parser` appears in sess_a's title AND in messages — both paths find it.
+		// `vitest` appears ONLY in sess_b's compact_text (metadata), not any message.
+		// LIKE path (which matches title/summary/compact) would find sess_b;
+		// FTS5 path (message content only) must NOT.
+		const hits = reader.searchMessages("vitest");
+		expect(hits).toEqual([]);
+	});
+
+	it("searchMessages() bestSeq points at the message with the match", () => {
+		const hits = reader.searchMessages("parser");
+		const sessA = hits.find((h) => h.session.id === "sess_a");
+		expect(sessA).toBeDefined();
+		// Messages 0 and 1 contain 'parser'; bestSeq should be one of them.
+		expect([0, 1]).toContain(sessA?.bestSeq);
+	});
 });

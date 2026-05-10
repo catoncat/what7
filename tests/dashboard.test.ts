@@ -190,4 +190,31 @@ describe("dashboard", () => {
 
 		await dashboard.close();
 	});
+
+	it("FTS5 /api/v1/sessions?q= returns message-body hits with snippet", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-fts-"));
+		const { dbPath } = buildCxsFixture(dir, sampleSessions(), { withFts5: true });
+
+		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
+
+		// `parser` appears in sess_a's messages and title — FTS5 hits it via messages.
+		const parserHits = (await (
+			await fetch(new URL("/api/v1/sessions?q=parser", dashboard.url))
+		).json()) as {
+			sessions: Array<{ id: string; snippet?: string; bestSeq?: number }>;
+		};
+		const sessA = parserHits.sessions.find((s) => s.id === "sess_a");
+		expect(sessA).toBeDefined();
+		expect(sessA?.snippet).toMatch(/«parser»/i);
+		expect(typeof sessA?.bestSeq).toBe("number");
+
+		// `vitest` is ONLY in compact_text metadata, never in a message.
+		// FTS5 path must not fabricate a hit.
+		const vitestHits = (await (
+			await fetch(new URL("/api/v1/sessions?q=vitest", dashboard.url))
+		).json()) as { sessions: Array<unknown> };
+		expect(vitestHits.sessions).toEqual([]);
+
+		await dashboard.close();
+	});
 });
