@@ -10,7 +10,7 @@
 
 | 编号 | 标题 | 严重度 | 状态 | 承担 intent |
 |---|---|---|---|---|
-| I-01 | Search 搜不到消息内容 | P0 | 🔴 待做 | — |
+| I-01 | Search 搜不到消息内容 | P0 | ✅ 已修（FTS5 还魂） | int_4d876585 |
 | I-02 | ReadingPane 不渲染 markdown | P0 | 🔴 待做 | — |
 | I-03 | 点击 session 时 list 闪 Loading | P1 | ✅ 已修（vue-query 接管） | int_bbcfbe59 |
 | I-04 | Projects 不折叠 top-N | P1 | 🔴 待做 | — |
