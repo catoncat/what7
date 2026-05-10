@@ -15,13 +15,13 @@
 | I-03 | 点击 session 时 list 闪 Loading | P1 | ✅ 已修（vue-query 接管） | int_bbcfbe59 |
 | I-04 | Projects 不折叠 top-N | P1 | 🔴 待做 | — |
 | I-05 | Share / Copy link 按钮没绑 | P1 | 🔴 待做 | — |
-| I-06 | 顶部搜索框 disabled + ⌘K 假 | P1 | 🔴 待做 | — |
+| I-06 | 顶部搜索框 disabled + ⌘K 假 | P1 | ✅ 已修 | int_2e120094 |
 | I-07 | 噪声 session (ping/no title) | P1 | 🟡 待观察 | — |
-| I-08 | cx agent badge 无信息量 | P1 | 🔴 待做 | — |
-| I-09 | Meta 字符串含噪声 | P1 | 🔴 待做 | — |
+| I-08 | cx agent badge 无信息量 | P1 | ✅ 已修 | int_2e120094 |
+| I-09 | Meta 字符串含噪声 | P1 | ✅ 已修 | int_2e120094 |
 | I-10 | /projects 加载两次 | P2 | ✅ 已修（query key 去重） | int_bbcfbe59 |
 | I-11 | Search Project 下拉无筛 | P2 | 🔴 待做 | — |
-| I-12 | 键盘快捷键全是假的 | P2 | 🔴 待做 | — |
+| I-12 | 键盘快捷键全是假的 | P2 | 🟡 部分（⌘K 已实；↑↓ / S 作为假提示删掉） | int_2e120094 |
 | I-13 | Shortcut label 拿不到 session | P2 | 🔴 待做 | — |
 | I-14 | Published 详情丢 query | P2 | 🔴 待做 | — |
 | I-15 | ReadingPane 无 error boundary | P2 | 🟡 部分（vue-query isError 可用，UI 没写） | int_bbcfbe59 |
