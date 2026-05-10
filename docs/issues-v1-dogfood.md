@@ -6,6 +6,35 @@
 
 ---
 
+## 总览（status at a glance）
+
+| 编号 | 标题 | 严重度 | 状态 | 承担 intent |
+|---|---|---|---|---|
+| I-01 | Search 搜不到消息内容 | P0 | 🔴 待做 | — |
+| I-02 | ReadingPane 不渲染 markdown | P0 | 🔴 待做 | — |
+| I-03 | 点击 session 时 list 闪 Loading | P1 | ✅ 已修（vue-query 接管） | int_bbcfbe59 |
+| I-04 | Projects 不折叠 top-N | P1 | 🔴 待做 | — |
+| I-05 | Share / Copy link 按钮没绑 | P1 | 🔴 待做 | — |
+| I-06 | 顶部搜索框 disabled + ⌘K 假 | P1 | 🔴 待做 | — |
+| I-07 | 噪声 session (ping/no title) | P1 | 🟡 待观察 | — |
+| I-08 | cx agent badge 无信息量 | P1 | 🔴 待做 | — |
+| I-09 | Meta 字符串含噪声 | P1 | 🔴 待做 | — |
+| I-10 | /projects 加载两次 | P2 | ✅ 已修（query key 去重） | int_bbcfbe59 |
+| I-11 | Search Project 下拉无筛 | P2 | 🔴 待做 | — |
+| I-12 | 键盘快捷键全是假的 | P2 | 🔴 待做 | — |
+| I-13 | Shortcut label 拿不到 session | P2 | 🔴 待做 | — |
+| I-14 | Published 详情丢 query | P2 | 🔴 待做 | — |
+| I-15 | ReadingPane 无 error boundary | P2 | 🟡 部分（vue-query isError 可用，UI 没写） | int_bbcfbe59 |
+
+此外，有**两项架构级改造**不以 issue 形式记录（见 `docs/frontend-refactor.md`）：
+
+| 编号 | 标题 | 状态 |
+|---|---|---|
+| A-01 | 前端引入 @tanstack/vue-query 作 server-state 层 | 🚧 代码已落未 commit (int_bbcfbe59) |
+| A-02 | `npm run dev` 一键起前后端 (concurrently + tsx watch) | 🚧 代码已落未 commit (int_bbcfbe59) |
+
+---
+
 ## P0 — 核心功能失灵
 
 ### I-01 · Search 搜不到消息内容，只匹配到元数据
@@ -58,16 +87,7 @@ watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
 ```
 `filter` 是 computed，每次 route 变化都返回**新对象字面量**（即便 `kind`/`slug`/query 都没变），watcher 跟着触发 → `loadSessions` 重跑 → `loading=true`。
 
-**状态**：**已修**（未 commit）。改用 stable key watch：
-```ts
-watch(
-  () => [f.kind, f.slug, f.q, f.since, f.project, f.shared ? "1" : ""].join("|"),
-  () => loadSessions(filter.value),
-  { immediate: true },
-);
-```
-
-**待确认**：修复后 `/recent` → `/recent/:id` / `/p/better` → `/p/better/:id` / `/search?q=x` → `/search/:id?q=x` 三条都不再 re-fetch。
+**状态**：**已修**（vue-query 接管 server state，从根上避免 watcher 误触发；初版 watcher 修复已被 int_bbcfbe59 的架构替代）。
 
 ---
 
@@ -146,6 +166,8 @@ watch(
 
 **修复**：`useProjects` composable 里 refresh 前检查 `loaded.value`，或引入 in-flight promise cache。
 
+**状态**：**已修**（int_bbcfbe59，vue-query 同 query key 自动去重 in-flight 请求）。
+
 ---
 
 ### I-11 · Search 的 Project 下拉 172 条无筛选
@@ -212,6 +234,5 @@ watch(
 5. **I-06 ⌘K 跳 /search**（P1，15 分钟）
 6. **I-08 删 cx badge**（P1，10 分钟）
 7. **I-09 meta 字符串精简**（P1，10 分钟）
-8. **I-03 Loading 闪烁**（已修未 commit）
 
-I-07 / I-10–I-15 留 v2 或 Good-first 清单。
+I-07 / I-11–I-14 留 v2 或 Good-first 清单。已修 / 部分已修项不再排队：I-03 / I-10 / I-15（部分）。

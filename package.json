@@ -18,6 +18,9 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "verify": "npm run lint && npm run test && npm run build",
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "tsx watch src/cli.ts serve --port 7717 --no-open",
+    "dev:web": "npm --prefix web run dev",
     "worker:dev": "wrangler dev --config worker/wrangler.jsonc --local",
     "worker:types": "wrangler types --config worker/wrangler.jsonc worker/src/env.d.ts"
   },
@@ -29,6 +32,8 @@
     "@cloudflare/workers-types": "^4.20260430.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.0.0",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.13",
     "wrangler": "^4.51.0"
