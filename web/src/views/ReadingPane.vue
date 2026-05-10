@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, inject, toRef } from "vue";
+import { computed, inject, ref, toRef } from "vue";
 import { useRoute } from "vue-router";
-import { useSessionDetailQuery } from "@/queries";
+import { useSessionDetailQuery, useShareSessionMutation } from "@/queries";
 import { renderMarkdown } from "@/utils/markdown";
 import { APP_SHELL_KEY } from "@/shell";
 import type { MessageBlock, Session } from "@/types";
@@ -15,6 +15,44 @@ const { data, isPending, isError, error } = useSessionDetailQuery(toRef(props, "
 
 const session = computed<Session | null>(() => data.value?.session ?? null);
 const messages = computed(() => data.value?.messages ?? []);
+
+// ---- Share / Copy actions (I-05) ---------------------------------------
+const shareMutation = useShareSessionMutation();
+const toast = ref<{ msg: string; tone: "ok" | "err" } | null>(null);
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flashToast(msg: string, tone: "ok" | "err" = "ok") {
+  toast.value = { msg, tone };
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.value = null;
+  }, 2200);
+}
+
+async function onCopyLink() {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    flashToast("Link copied");
+  } catch {
+    window.prompt("Copy link", window.location.href);
+  }
+}
+
+async function onShare() {
+  if (!session.value) return;
+  try {
+    const result = await shareMutation.mutateAsync(session.value.id);
+    try {
+      await navigator.clipboard.writeText(result.url);
+      flashToast("Shared · URL copied");
+    } catch {
+      flashToast(`Shared: ${result.url}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    flashToast(msg.includes("WHAT7_WORKER_URL") ? "Worker not configured" : `Share failed: ${msg}`, "err");
+  }
+}
 
 const listPath = computed<string>(() => {
   const meta = route.meta as { kind?: string };
@@ -64,8 +102,11 @@ function msgRoleClass(m: MessageBlock): string {
         >‹</RouterLink>
         <h1 v-text="session.title"></h1>
         <div class="actions">
-          <button class="ghost">Copy link</button>
-          <button class="primary">Share</button>
+          <button class="ghost" @click="onCopyLink">Copy link</button>
+          <button class="primary" :disabled="shareMutation.isPending.value" @click="onShare">
+            <span v-if="shareMutation.isPending.value">Sharing…</span>
+            <span v-else>Share</span>
+          </button>
         </div>
       </div>
       <div class="meta">
@@ -82,6 +123,7 @@ function msgRoleClass(m: MessageBlock): string {
       </div>
       <div v-if="!messages.length" class="empty">No messages.</div>
     </div>
+    <div v-if="toast" :class="['toast', `tone-${toast.tone}`]" v-text="toast.msg"></div>
   </article>
   <div v-else-if="isPending" class="missing">Loading…</div>
   <div v-else-if="isError" class="missing">
@@ -97,6 +139,7 @@ function msgRoleClass(m: MessageBlock): string {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column;
   background: var(--bg);
+  position: relative;
 }
 .head {
   position: sticky; top: 0;
@@ -254,5 +297,28 @@ function msgRoleClass(m: MessageBlock): string {
   display: grid; place-items: center;
   color: var(--fg-3);
   font-family: var(--font-mono);
+}
+
+.actions button[disabled] { opacity: 0.6; cursor: wait; }
+
+.toast {
+  position: absolute; right: 28px; bottom: 28px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--fg);
+  font-size: 12.5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toast-fade-in 140ms ease-out;
+  z-index: 20;
+}
+.toast.tone-err {
+  border-color: #e66;
+  color: #fbb;
+}
+@keyframes toast-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>
