@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, toRef } from "vue";
 import { useRoute } from "vue-router";
-import { fetchSessionDetail } from "@/api/client";
+import { useSessionDetailQuery } from "@/queries";
 import { APP_SHELL_KEY } from "@/shell";
 import type { MessageBlock, Session } from "@/types";
 
@@ -10,28 +10,10 @@ const route = useRoute();
 
 const props = defineProps<{ id: string }>();
 
-const session = ref<Session | null>(null);
-const messages = ref<MessageBlock[]>([]);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const { data, isPending, isError, error } = useSessionDetailQuery(toRef(props, "id"));
 
-async function load(id: string) {
-  loading.value = true;
-  error.value = null;
-  session.value = null;
-  messages.value = [];
-  try {
-    const data = await fetchSessionDetail(id);
-    session.value = data.session;
-    messages.value = data.messages ?? [];
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    loading.value = false;
-  }
-}
-
-watch(() => props.id, (id) => load(id), { immediate: true });
+const session = computed<Session | null>(() => data.value?.session ?? null);
+const messages = computed(() => data.value?.messages ?? []);
 
 const listPath = computed<string>(() => {
   const meta = route.meta as { kind?: string };
@@ -100,9 +82,9 @@ function msgRoleClass(m: MessageBlock): string {
       <div v-if="!messages.length" class="empty">No messages.</div>
     </div>
   </article>
-  <div v-else-if="loading" class="missing">Loading…</div>
-  <div v-else-if="error" class="missing">
-    <code v-text="error"></code>
+  <div v-else-if="isPending" class="missing">Loading…</div>
+  <div v-else-if="isError" class="missing">
+    <code v-text="error?.message ?? 'Failed to load session'"></code>
   </div>
   <div v-else class="missing">
     Session <code v-text="props.id"></code> not found.

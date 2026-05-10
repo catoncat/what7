@@ -5,10 +5,9 @@ import NavSidebar from "@/components/NavSidebar.vue";
 import SessionList from "@/components/SessionList.vue";
 import SearchView from "@/views/SearchView.vue";
 import SettingsView from "@/views/SettingsView.vue";
-import { fetchProjectSessions, fetchSessions } from "@/api/client";
 import { useProjects } from "@/composables/useProjects";
+import { useProjectSessionsQuery, useSessionsQuery, type SessionsParams } from "@/queries";
 import { APP_SHELL_KEY, type AppShell } from "@/shell";
-import type { Session } from "@/types";
 
 const route = useRoute();
 
@@ -42,49 +41,7 @@ const filter = computed<Filter>(() => {
   return { kind: "recent" };
 });
 
-const sessions = ref<Session[]>([]);
-const { projects, refresh: refreshProjects } = useProjects();
-const loading = ref(false);
-
-async function loadSessions(f: Filter) {
-  if (f.kind === "recent") {
-    loading.value = true;
-    const result = await fetchSessions({ limit: 100 });
-    sessions.value = result.sessions;
-    loading.value = false;
-    return;
-  }
-  if (f.kind === "project" && f.slug) {
-    loading.value = true;
-    const result = await fetchProjectSessions(f.slug, { limit: 100 });
-    sessions.value = result.sessions;
-    loading.value = false;
-    return;
-  }
-  if (f.kind === "search" || f.kind === "published") {
-    // Only fetch when at least one signal is set, otherwise show empty hint.
-    const hasSignal =
-      f.kind === "published" || Boolean(f.q || f.since || f.project || f.shared);
-    if (!hasSignal) {
-      sessions.value = [];
-      loading.value = false;
-      return;
-    }
-    loading.value = true;
-    const result = await fetchSessions({
-      limit: 100,
-      ...(f.q ? { q: f.q } : {}),
-      ...(f.since ? { since: sinceToIso(f.since) } : {}),
-      ...(f.project ? { project: f.project } : {}),
-      ...(f.shared ? { shared: 1 } : {}),
-    });
-    sessions.value = result.sessions;
-    loading.value = false;
-    return;
-  }
-  sessions.value = [];
-  loading.value = false;
-}
+const { projects } = useProjects();
 
 function sinceToIso(since: string): string {
   const days = since === "1d" ? 1 : since === "7d" ? 7 : since === "30d" ? 30 : 0;
@@ -92,17 +49,54 @@ function sinceToIso(since: string): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-watch(
-  () => {
-    const f = filter.value;
-    return [f.kind, f.slug ?? "", f.q ?? "", f.since ?? "", f.project ?? "", f.shared ? "1" : ""].join("|");
-  },
-  () => loadSessions(filter.value),
-  { immediate: true },
+// Session list is served by a reactive query. When the route switches between
+// /recent and /recent/:id the `filter` value stays semantically identical —
+// vue-query then serves cached data with no loading flicker.
+
+const recentParams = computed<SessionsParams>(() => ({ limit: 100 }));
+const recentQuery = useSessionsQuery(recentParams);
+
+const projectSlug = computed(() =>
+  filter.value.kind === "project" ? filter.value.slug : undefined,
+);
+const projectParams = computed<Omit<SessionsParams, "project">>(() => ({ limit: 100 }));
+const projectQuery = useProjectSessionsQuery(projectSlug, projectParams);
+
+const searchParams = computed<SessionsParams | null>(() => {
+  const f = filter.value;
+  if (f.kind !== "search" && f.kind !== "published") return null;
+  const hasSignal =
+    f.kind === "published" || Boolean(f.q || f.since || f.project || f.shared);
+  if (!hasSignal) return null;
+  return {
+    limit: 100,
+    ...(f.q ? { q: f.q } : {}),
+    ...(f.since ? { since: sinceToIso(f.since) } : {}),
+    ...(f.project ? { project: f.project } : {}),
+    ...(f.shared ? { shared: 1 as const } : {}),
+  };
+});
+const searchEnabled = computed(() => !!searchParams.value);
+const searchQuery = useSessionsQuery(
+  computed(() => searchParams.value ?? { limit: 100 }),
 );
 
-onMounted(async () => {
-  await refreshProjects();
+const sessions = computed(() => {
+  const f = filter.value;
+  if (f.kind === "project") return projectQuery.data.value?.sessions ?? [];
+  if ((f.kind === "search" || f.kind === "published") && searchEnabled.value)
+    return searchQuery.data.value?.sessions ?? [];
+  if (f.kind === "recent") return recentQuery.data.value?.sessions ?? [];
+  return [];
+});
+
+const loading = computed(() => {
+  const f = filter.value;
+  if (f.kind === "project") return projectQuery.isPending.value;
+  if ((f.kind === "search" || f.kind === "published") && searchEnabled.value)
+    return searchQuery.isPending.value;
+  if (f.kind === "recent") return recentQuery.isPending.value;
+  return false;
 });
 
 const listTitle = computed<string>(() => {
@@ -130,7 +124,7 @@ const buildLink = (sessionId: string): string => {
     return `/search/${sessionId}${qs ? `?${qs}` : ""}`;
   }
   if (f.kind === "published") {
-    // No /published/:id route yet (M4.4); reuse the session direct-link.
+    // No /published/:id list yet; fall back to session direct-link.
     return `/s/${sessionId}`;
   }
   return `/recent/${sessionId}`;
