@@ -92,7 +92,14 @@ function sinceToIso(since: string): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
+watch(
+  () => {
+    const f = filter.value;
+    return [f.kind, f.slug ?? "", f.q ?? "", f.since ?? "", f.project ?? "", f.shared ? "1" : ""].join("|");
+  },
+  () => loadSessions(filter.value),
+  { immediate: true },
+);
 
 onMounted(async () => {
   await refreshProjects();
