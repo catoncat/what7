@@ -7,7 +7,8 @@ import SearchView from "@/views/SearchView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import { useProjects } from "@/composables/useProjects";
 import { useProjectSessionsQuery, useSessionsQuery, type SessionsParams } from "@/queries";
-import { APP_SHELL_KEY, type AppShell } from "@/shell";
+import { APP_SHELL_KEY, CURRENT_SESSION_KEY, type AppShell } from "@/shell";
+import type { Session } from "@/types";
 
 const route = useRoute();
 
@@ -35,7 +36,7 @@ const filter = computed<Filter>(() => {
     };
   }
   if (meta?.kind === "published") {
-    return { kind: "published", since: q.since, project: q.project, shared: true };
+    return { kind: "published", q: q.q, since: q.since, project: q.project, shared: true };
   }
   if (meta?.kind === "settings") return { kind: "settings" };
   return { kind: "recent" };
@@ -116,6 +117,12 @@ const activeId = computed(() => {
   return Array.isArray(id) ? id[0] : id;
 });
 
+const currentSession = computed<Session | null>(() => {
+  const id = activeId.value;
+  if (!id) return null;
+  return sessions.value.find((s) => s.id === id) ?? null;
+});
+
 const buildLink = (sessionId: string): string => {
   const f = filter.value;
   if (f.kind === "project") return `/p/${f.slug}/${sessionId}`;
@@ -124,8 +131,10 @@ const buildLink = (sessionId: string): string => {
     return `/search/${sessionId}${qs ? `?${qs}` : ""}`;
   }
   if (f.kind === "published") {
-    // No /published/:id list yet; fall back to session direct-link.
-    return `/s/${sessionId}`;
+    // I-14: use /published/:id so chip bar query (shared / since / project)
+    // stays preserved when drilling in.
+    const qs = new URLSearchParams(route.query as Record<string, string>).toString();
+    return `/published/${sessionId}${qs ? `?${qs}` : ""}`;
   }
   return `/recent/${sessionId}`;
 };
@@ -173,6 +182,7 @@ const shell: AppShell = {
   closeNav: () => { navOpen.value = false; },
 };
 provide(APP_SHELL_KEY, shell);
+provide(CURRENT_SESSION_KEY, currentSession);
 </script>
 
 <template>

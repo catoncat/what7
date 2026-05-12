@@ -8,7 +8,7 @@ const shell = inject(APP_SHELL_KEY);
 const route = useRoute();
 const router = useRouter();
 
-defineProps<{
+const props = defineProps<{
   projects: readonly Project[];
   sessions: readonly Session[];
   loading: boolean;
@@ -39,9 +39,26 @@ const since = computed<Since>(() => {
   if (v === "1d" || v === "7d" || v === "30d") return v;
   return "";
 });
-const shared = computed(() => route.query.shared === "1");
 const projectSlug = computed(() => String(route.query.project ?? ""));
 const q = computed(() => String(route.query.q ?? ""));
+const isPublished = computed(() => route.meta.kind === "published");
+const shared = computed(() => isPublished.value || route.query.shared === "1");
+const detailRouteName = computed(() => (isPublished.value ? "published.session" : "search.session"));
+
+// I-11: hide `hidden` projects from the dropdown. If a hidden slug is
+// already selected via URL, surface it as `(hidden) slug` so state stays
+// visible and clearing works.
+const visibleProjects = computed(() =>
+  props.projects
+    .filter((p) => !p.hidden)
+    .sort((a, b) => (b.sessionCount ?? 0) - (a.sessionCount ?? 0)),
+);
+const currentSelectedHidden = computed(() => {
+  const slug = projectSlug.value;
+  if (!slug) return false;
+  const match = props.projects.find((p) => p.slug === slug);
+  return !!match?.hidden;
+});
 
 function patch(next: Record<string, string | undefined>) {
   const query: Record<string, string> = {};
@@ -49,13 +66,14 @@ function patch(next: Record<string, string | undefined>) {
     if (v === undefined || v === null || v === "") continue;
     query[k] = String(v);
   }
-  router.replace({ name: "search", query });
+  router.replace({ name: isPublished.value ? "published" : "search", query });
 }
 
 function setSince(v: Since) {
   patch({ since: v || undefined });
 }
 function toggleShared() {
+  if (isPublished.value) return;
   patch({ shared: shared.value ? undefined : "1" });
 }
 function setProject(slug: string) {
@@ -92,12 +110,13 @@ function onInput(ev: Event) {
         />
       </div>
       <label class="shared">
-        <input type="checkbox" :checked="shared" @change="toggleShared" />
+        <input type="checkbox" :checked="shared" :disabled="isPublished" @change="toggleShared" />
         <span>Shared only</span>
       </label>
       <select :value="projectSlug" @change="setProject(($event.target as HTMLSelectElement).value)">
         <option value="">All projects</option>
-        <option v-for="p in projects" :key="p.slug" :value="p.slug" v-text="p.displayName ?? p.name" />
+        <option v-for="p in visibleProjects" :key="p.slug" :value="p.slug" v-text="p.displayName ?? p.name" />
+        <option v-if="currentSelectedHidden" :value="projectSlug" v-text="`(hidden) ${projectSlug}`" />
       </select>
     </header>
 
@@ -111,7 +130,7 @@ function onInput(ev: Event) {
 
     <ol v-else class="hits">
       <li v-for="s in sessions" :key="s.id">
-        <RouterLink :to="{ name: 'search.session', params: { id: s.id }, query: route.query }" class="hit">
+        <RouterLink :to="{ name: detailRouteName, params: { id: s.id }, query: route.query }" class="hit">
           <div class="title" v-text="s.title"></div>
           <div class="meta">
             <span v-text="s.project"></span>

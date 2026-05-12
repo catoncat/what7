@@ -11,10 +11,33 @@ const route = useRoute();
 
 const props = defineProps<{ id: string }>();
 
-const { data, isPending, isError, error } = useSessionDetailQuery(toRef(props, "id"));
+const { data, isPending, isError, error, refetch } = useSessionDetailQuery(toRef(props, "id"));
 
 const session = computed<Session | null>(() => data.value?.session ?? null);
 const messages = computed(() => data.value?.messages ?? []);
+
+interface ErrorInfo {
+  status: string;
+  requestPath: string;
+  message: string;
+}
+
+const errorInfo = computed<ErrorInfo>(() => {
+  const message = error.value?.message ?? "Unknown error";
+  const m = message.match(/^(\d{3})\s+([^—]+?)\s+—\s+(.+)$/);
+  if (m) {
+    const [, code = "", statusText = "", requestPath = ""] = m;
+    return {
+      status: `${code} ${statusText.trim()}`,
+      requestPath: requestPath.trim(),
+      message,
+    };
+  }
+  return { status: "Network / client error", requestPath: "", message };
+});
+const errorKind = computed<"missing" | "other">(() =>
+  errorInfo.value.status.startsWith("404") ? "missing" : "other",
+);
 
 // ---- Share / Copy actions (I-05) ---------------------------------------
 const shareMutation = useShareSessionMutation();
@@ -61,6 +84,10 @@ const listPath = computed<string>(() => {
   if (meta?.kind === "search") {
     const qs = new URLSearchParams(route.query as Record<string, string>).toString();
     return `/search${qs ? `?${qs}` : ""}`;
+  }
+  if (meta?.kind === "published") {
+    const qs = new URLSearchParams(route.query as Record<string, string>).toString();
+    return `/published${qs ? `?${qs}` : ""}`;
   }
   if (meta?.kind === "session") return "/recent";
   return "/recent";
@@ -121,13 +148,41 @@ function msgRoleClass(m: MessageBlock): string {
         </div>
         <div class="content" v-html="renderMarkdown(m.content)"></div>
       </div>
-      <div v-if="!messages.length" class="empty">No messages.</div>
+      <div v-if="!messages.length" class="empty-card">
+        <h2>No indexed messages</h2>
+        <p>
+          This session exists, but cxs returned zero message rows. Check the
+          source transcript if the pane looks unexpectedly empty.
+        </p>
+        <code v-text="session.sourcePath"></code>
+      </div>
     </div>
     <div v-if="toast" :class="['toast', `tone-${toast.tone}`]" v-text="toast.msg"></div>
   </article>
   <div v-else-if="isPending" class="missing">Loading…</div>
   <div v-else-if="isError" class="missing">
-    <code v-text="error?.message ?? 'Failed to load session'"></code>
+    <div class="err-card">
+      <h2 v-if="errorKind === 'missing'">Session not found</h2>
+      <h2 v-else>Failed to load</h2>
+      <p v-if="errorKind === 'missing'">
+        <code v-text="props.id"></code> no longer exists in the cxs index.
+        Try <kbd>cxs sync</kbd> if you expect it to be there.
+      </p>
+      <p v-else>
+        <code v-text="errorInfo.message"></code>
+      </p>
+      <dl>
+        <div>
+          <dt>Status</dt>
+          <dd v-text="errorInfo.status"></dd>
+        </div>
+        <div v-if="errorInfo.requestPath">
+          <dt>Request</dt>
+          <dd><code v-text="errorInfo.requestPath"></code></dd>
+        </div>
+      </dl>
+      <button class="retry" @click="refetch()">Retry</button>
+    </div>
   </div>
   <div v-else class="missing">
     Session <code v-text="props.id"></code> not found.
@@ -191,7 +246,35 @@ function msgRoleClass(m: MessageBlock): string {
   display: flex; flex-direction: column; gap: 22px;
   max-width: 880px;
 }
-.body .empty { color: var(--fg-3); font-family: var(--font-mono); font-size: 12px; }
+.body .empty-card {
+  max-width: 520px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--fg-2);
+}
+.body .empty-card h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.body .empty-card p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.body .empty-card code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-3);
+  background: var(--surface-2);
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
 .msg .role {
   display: flex; gap: 8px;
   font-family: var(--font-mono); font-size: 10.5px;
@@ -298,6 +381,67 @@ function msgRoleClass(m: MessageBlock): string {
   color: var(--fg-3);
   font-family: var(--font-mono);
 }
+.err-card {
+  max-width: 380px;
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--fg-2);
+  font-family: var(--font-sans);
+  text-align: left;
+}
+.err-card h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.err-card p {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.err-card dl {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+.err-card dl div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+}
+.err-card dt {
+  color: var(--fg-3);
+  font-size: 11px;
+}
+.err-card dd {
+  margin: 0;
+  font-size: 11.5px;
+}
+.err-card code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.err-card kbd {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.err-card .retry {
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--fg);
+}
+.err-card .retry:hover { background: var(--surface-2); }
 
 .actions button[disabled] { opacity: 0.6; cursor: wait; }
 

@@ -2,7 +2,7 @@
 
 基于 chrome devtools 真实浏览 + 真实 cxs 数据（~2956 session / 172 project）跑出来的问题清单。按严重度分 P0 / P1 / P2。
 
-**结论**：v1 形态已成，功能不可用。两项核心体验破了（search 搜不到实内容、reading pane 不渲染），需要返工。
+**结论**：v1 形态已成，P0/P1 dogfood 问题已清；P2 残余继续按本清单收口。
 
 ---
 
@@ -20,18 +20,18 @@
 | I-08 | cx agent badge 无信息量 | P1 | ✅ 已修 | int_2e120094 |
 | I-09 | Meta 字符串含噪声 | P1 | ✅ 已修 | int_2e120094 |
 | I-10 | /projects 加载两次 | P2 | ✅ 已修（query key 去重） | int_bbcfbe59 |
-| I-11 | Search Project 下拉无筛 | P2 | 🔴 待做 | — |
+| I-11 | Search Project 下拉无筛 | P2 | ✅ 已修（过滤 hidden + sessionCount 排序） | int_1adfba54 |
 | I-12 | 键盘快捷键全是假的 | P2 | 🟡 部分（⌘K 已实；↑↓ / S 作为假提示删掉） | int_2e120094 |
-| I-13 | Shortcut label 拿不到 session | P2 | 🔴 待做 | — |
-| I-14 | Published 详情丢 query | P2 | 🔴 待做 | — |
-| I-15 | ReadingPane 无 error boundary | P2 | 🟡 部分（vue-query isError 可用，UI 没写） | int_bbcfbe59 |
+| I-13 | Shortcut label 拿不到 session | P2 | ✅ 已修（当前 session 注入 + query cache 兜底） | int_1adfba54 |
+| I-14 | Published 详情丢 query | P2 | ✅ 已修（/published/:id + query 保留） | int_1adfba54 |
+| I-15 | ReadingPane 无 error boundary | P2 | ✅ 已修（status/request + Retry + 空消息 sourcePath） | int_1adfba54 |
 
 此外，有**两项架构级改造**不以 issue 形式记录（见 `docs/frontend-refactor.md`）：
 
 | 编号 | 标题 | 状态 |
 |---|---|---|
-| A-01 | 前端引入 @tanstack/vue-query 作 server-state 层 | 🚧 代码已落未 commit (int_bbcfbe59) |
-| A-02 | `npm run dev` 一键起前后端 (concurrently + tsx watch) | 🚧 代码已落未 commit (int_bbcfbe59) |
+| A-01 | 前端引入 @tanstack/vue-query 作 server-state 层 | ✅ 已落地 (int_bbcfbe59) |
+| A-02 | `npm run dev` 一键起前后端 (concurrently + tsx watch) | ✅ 已落地 (int_bbcfbe59) |
 
 ---
 
@@ -176,6 +176,8 @@ watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
 
 **修复**：v1 至少在 Settings 给 hidden，跟 NavSidebar 一样过滤 hidden；v2 用 combobox 输入筛。
 
+**状态**：**已修**（int_1adfba54，SearchView 过滤 hidden，并按 `sessionCount DESC` 跟 NavSidebar 对齐）。
+
 ---
 
 ### I-12 · 键盘快捷键全是假的
@@ -194,6 +196,8 @@ watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
 
 **修复**：NavSidebar inject 当前 reading session（从 ReadingPane 注入 provide/inject，或从 AppLayout 的 sessions[].find(activeId)），传给 addCurrent。
 
+**状态**：**已修**（int_1adfba54，AppLayout provide 当前列表 session，NavSidebar 用 query cache 兜底）。
+
 ---
 
 ### I-14 · Published / search 详情 session 列链丢 query
@@ -202,6 +206,8 @@ watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
 
 **修复**：加 `/published/:id` named route，`buildLink` 保留 query。
 
+**状态**：**已修**（int_1adfba54，Published 列表进入 `published.session`，chip query 保留，返回仍回 `/published?...`）。
+
 ---
 
 ### I-15 · ReadingPane 没有空消息 fallback / error boundary
@@ -209,6 +215,8 @@ watch(filter, (f) => loadSessions(f), { immediate: true, deep: true });
 **现象**：如果 messages 数组为空（比如某 session cxs 没索引全），看到 `No messages.` 一行灰字；如果 fetch 失败，最多显示 `error.message` 一行 monospace。
 
 **修复**：加具名 error 状态（404 / 500 / network），给重试按钮；messages=0 加 hint 指向 sourcePath 方便用户检查。
+
+**状态**：**已修**（int_1adfba54，错误卡片显示 status/request + Retry；空消息显示 `sourcePath`）。
 
 ---
 

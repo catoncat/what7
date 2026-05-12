@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import { useQueryClient } from "@tanstack/vue-query";
+import type { SessionDetailResponse } from "@/api/client";
 import { useProjects } from "@/composables/useProjects";
 import { useShortcuts } from "@/composables/useShortcuts";
-import { APP_SHELL_KEY } from "@/shell";
-import type { Project } from "@/types";
+import { qk } from "@/queries";
+import { APP_SHELL_KEY, CURRENT_SESSION_KEY } from "@/shell";
+import type { Project, Session } from "@/types";
 
 const shell = inject(APP_SHELL_KEY);
+const providedCurrentSession = inject(CURRENT_SESSION_KEY, null);
 const route = useRoute();
 const router = useRouter();
 
@@ -100,6 +104,26 @@ const currentProject = computed<Project | null>(() => {
   return projects.value.find((p) => p.slug === String(slug)) ?? null;
 });
 
+const qc = useQueryClient();
+const currentSessionId = computed(() => {
+  const id = route.params.id;
+  return id ? String(Array.isArray(id) ? id[0] : id) : "";
+});
+
+const currentSession = computed<Session | null>(() => {
+  const id = currentSessionId.value;
+  if (!id) return null;
+
+  // I-13: prefer the current list/session provided by AppLayout, then fall
+  // back to the detail query cache for direct /s/:id style routes.
+  const provided = providedCurrentSession?.value;
+  if (provided?.id === id) return provided;
+
+  const key = qk.sessionDetail(id);
+  const cached = qc.getQueryData<SessionDetailResponse>(key);
+  return cached?.session ?? null;
+});
+
 onMounted(async () => {
   const saved = localStorage.getItem(THEME_KEY) as Theme | null;
   if (saved === "auto" || saved === "light" || saved === "dark") theme.value = saved;
@@ -153,7 +177,10 @@ function closeMenu() {
 }
 
 async function onAddCurrent() {
-  await addCurrent(route, { project: currentProject.value });
+  await addCurrent(route, {
+    project: currentProject.value,
+    session: currentSession.value,
+  });
 }
 
 async function onClickShortcut(ev: MouseEvent, id: string, url: string) {

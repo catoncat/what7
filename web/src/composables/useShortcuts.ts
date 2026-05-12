@@ -171,6 +171,10 @@ export function deriveLabel(
       return q.q ? `Search: ${truncate(q.q, 24)}` : "Search";
     case "published":
       return "Published";
+    case "published.session": {
+      const title = context.session?.title?.trim();
+      return (title && truncate(title, 60)) || "Session";
+    }
     case "settings":
       return "Settings";
     default:
@@ -250,6 +254,8 @@ function mapRouteToApi(url: string): string | null {
     if (recentMatch) return `/api/v1/sessions/${encodeURIComponent(recentMatch[1] ?? "")}`;
     const searchMatch = path.match(/^\/search\/([^/]+)$/);
     if (searchMatch) return `/api/v1/sessions/${encodeURIComponent(searchMatch[1] ?? "")}`;
+    const publishedMatch = path.match(/^\/published\/([^/]+)$/);
+    if (publishedMatch) return `/api/v1/sessions/${encodeURIComponent(publishedMatch[1] ?? "")}`;
     return null;
   } catch {
     return null;
