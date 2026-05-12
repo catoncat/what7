@@ -35,6 +35,8 @@ what7 doctor --json                                 # verify cxs db / state dir 
 
 Run this manually after CI passes, or before trusting a new Worker / env setup. Do not put Worker secrets in CI, commits, screenshots, or issue logs.
 
+Last verified: 2026-05-12 against the live `what7-share.copyright.workers.dev` Worker. The smoke published one real session, confirmed the public share URL returned HTML, confirmed `what7 list --json` did not expose `deleteCapability`, unpublished the share, and confirmed the public URL returned the unpublished page.
+
 ### Option A — live Worker env
 
 ```bash
