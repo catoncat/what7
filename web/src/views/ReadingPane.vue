@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, toRef } from "vue";
+import { computed, inject, ref, toRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useSessionDetailQuery, useShareSessionMutation } from "@/queries";
 import { renderMarkdown } from "@/utils/markdown";
@@ -15,6 +15,19 @@ const { data, isPending, isError, error, refetch } = useSessionDetailQuery(toRef
 
 const session = computed<Session | null>(() => data.value?.session ?? null);
 const messages = computed(() => data.value?.messages ?? []);
+const selectedIds = ref<string[]>([]);
+const selectedDrafts = ref<Record<string, string>>({});
+
+const selectedCount = computed(() => selectedIds.value.length);
+const selectedMessages = computed(() => {
+  const selected = new Set(selectedIds.value);
+  return messages.value.filter((m) => selected.has(m.id));
+});
+
+watch(() => props.id, () => {
+  selectedIds.value = [];
+  selectedDrafts.value = {};
+});
 
 interface ErrorInfo {
   status: string;
@@ -74,6 +87,53 @@ async function onShare() {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     flashToast(msg.includes("WHAT7_WORKER_URL") ? "Worker not configured" : `Share failed: ${msg}`, "err");
+  }
+}
+
+function isSelected(id: string): boolean {
+  return selectedIds.value.includes(id);
+}
+
+function toggleSelected(message: MessageBlock, checked: boolean) {
+  if (checked) {
+    if (!selectedIds.value.includes(message.id)) selectedIds.value = [...selectedIds.value, message.id];
+    if (selectedDrafts.value[message.id] === undefined) {
+      selectedDrafts.value = { ...selectedDrafts.value, [message.id]: message.content };
+    }
+  } else {
+    selectedIds.value = selectedIds.value.filter((id) => id !== message.id);
+  }
+}
+
+function selectAllMessages() {
+  selectedIds.value = messages.value.map((m) => m.id);
+  selectedDrafts.value = Object.fromEntries(messages.value.map((m) => [m.id, selectedDrafts.value[m.id] ?? m.content]));
+}
+
+function clearSelection() {
+  selectedIds.value = [];
+}
+
+async function onShareSelected() {
+  if (!session.value || !selectedMessages.value.length) return;
+  try {
+    const result = await shareMutation.mutateAsync({
+      id: session.value.id,
+      messages: selectedMessages.value.map((m) => ({
+        id: m.id,
+        order: m.order,
+        content: selectedDrafts.value[m.id] ?? m.content,
+      })),
+    });
+    try {
+      await navigator.clipboard.writeText(result.url);
+      flashToast(`Shared ${selectedMessages.value.length} selected · URL copied`);
+    } catch {
+      flashToast(`Shared selected: ${result.url}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    flashToast(msg.includes("WHAT7_WORKER_URL") ? "Worker not configured" : `Share selected failed: ${msg}`, "err");
   }
 }
 
@@ -139,14 +199,37 @@ function msgRoleClass(m: MessageBlock): string {
       <div class="meta">
         <span v-text="headLine(session)"></span>
       </div>
+      <div v-if="messages.length" class="selection-bar">
+        <span v-if="selectedCount" v-text="`${selectedCount} selected for share`"></span>
+        <span v-else>Select messages to publish a trimmed share.</span>
+        <button class="ghost" type="button" @click="selectAllMessages">Select all</button>
+        <button class="ghost" type="button" :disabled="!selectedCount" @click="clearSelection">Clear</button>
+        <button class="primary" type="button" :disabled="!selectedCount || shareMutation.isPending.value" @click="onShareSelected">
+          <span v-if="shareMutation.isPending.value && selectedCount">Sharing selected…</span>
+          <span v-else>Share selected</span>
+        </button>
+      </div>
     </header>
     <div class="body">
-      <div v-for="m in messages" :key="m.id" :class="['msg', msgRoleClass(m)]">
+      <div v-for="m in messages" :key="m.id" :class="['msg', msgRoleClass(m), { selected: isSelected(m.id) }]">
         <div class="role">
-          <span v-text="msgRoleLabel(m)"></span>
+          <label class="select-msg">
+            <input
+              type="checkbox"
+              :checked="isSelected(m.id)"
+              @change="toggleSelected(m, ($event.target as HTMLInputElement).checked)"
+            />
+            <span v-text="msgRoleLabel(m)"></span>
+          </label>
           <span v-if="m.toolName" class="tool-name" v-text="m.toolName"></span>
         </div>
-        <div class="content" v-html="renderMarkdown(m.content)"></div>
+        <textarea
+          v-if="isSelected(m.id)"
+          v-model="selectedDrafts[m.id]"
+          class="edit-box"
+          :aria-label="`Edit selected ${msgRoleLabel(m)} message`"
+        ></textarea>
+        <div v-else class="content" v-html="renderMarkdown(m.content)"></div>
       </div>
       <div v-if="!messages.length" class="empty-card">
         <h2>No indexed messages</h2>
@@ -233,11 +316,37 @@ function msgRoleClass(m: MessageBlock): string {
   border-color: transparent;
 }
 .actions .primary:hover { background: var(--brand-soft-hover); }
+.actions button[disabled],
+.selection-bar button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .meta {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   margin-top: 8px;
   font-family: var(--font-mono); font-size: 10.5px;
   color: var(--fg-3);
+}
+.selection-bar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--fg-2);
+  font-size: 12px;
+}
+.selection-bar span { flex: 1; min-width: 180px; }
+.selection-bar button {
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+}
+.selection-bar .ghost:hover { color: var(--fg); border-color: var(--line-strong); }
+.selection-bar .primary {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: transparent;
 }
 
 .body {
@@ -281,7 +390,37 @@ function msgRoleClass(m: MessageBlock): string {
   color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.06em;
   margin-bottom: 4px;
 }
+.msg.selected {
+  padding: 12px;
+  margin: -12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.select-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.select-msg input { accent-color: var(--brand); }
 .msg .role .tool-name { color: var(--accent); text-transform: none; }
+.msg .edit-box {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--fg);
+  font: 12.5px/1.55 var(--font-mono);
+}
+.msg .edit-box:focus {
+  outline: none;
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
 .msg .content {
   font-size: 13.5px; line-height: 1.65;
   color: var(--fg);

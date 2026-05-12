@@ -353,7 +353,7 @@ type ProjectPref = {
 
 ## 11. v2+ deferred
 
-- **Turn 级 share 裁剪 + 文本编辑后再发布**（丁丁明确要做）。
+- **Turn 级 share 裁剪 + 文本编辑后再发布**：v1.1 已先落 message 级最小切片（ReadingPane 勾选消息、inline 编辑、Share selected）；更细的 turn/anchor 级体验仍可继续演进。
 - shortcut 同步到云 / 跨设备。
 - 多 agent 来源（claude code / cursor / 其它 JSONL 格式）—— 需要 cxs 先支持。
 - API token auth + 远程访问。

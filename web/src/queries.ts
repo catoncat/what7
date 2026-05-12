@@ -24,6 +24,7 @@ import {
   updateProject as apiUpdateProject,
   updateShortcut as apiUpdateShortcut,
   type SessionDetailResponse,
+  type ShareMessageInput,
   type SessionPage,
 } from "@/api/client";
 import type { Project, Shortcut } from "@/types";
@@ -232,7 +233,8 @@ export function useReorderShortcutsMutation() {
 export function useShareSessionMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: apiShareSession,
+    mutationFn: (input: string | { id: string; messages?: ShareMessageInput[] }) =>
+      typeof input === "string" ? apiShareSession(input) : apiShareSession(input.id, { messages: input.messages }),
     onSuccess: () => {
       // shares endpoint currently not queried; no-op. Kept as hook so future
       // Published view can invalidate it consistently.

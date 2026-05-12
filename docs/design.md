@@ -39,7 +39,8 @@ See `prd-v1.md` §7. Summary:
 
 - `GET /projects`, `GET /projects/:slug`, `PATCH /projects/:slug`, `GET /projects/:slug/sessions`
 - `GET /sessions?limit&offset&q&project&shared&since&until`, `GET /sessions/:id?messages=1`
-- `POST /sessions/:id/share`, `GET /shares`, `DELETE /shares/:localId`
+- `POST /sessions/:id/share` publishes either the full transcript (empty body) or a selected/edited message subset (`{messages:[{id,order,content}]}`).
+- `GET /shares`, `DELETE /shares/:localId`
 - `GET/POST /shortcuts`, `PATCH/DELETE /shortcuts/:id`
 
 Server binds 127.0.0.1 with no auth (PRD D-08).

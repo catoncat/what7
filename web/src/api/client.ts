@@ -33,6 +33,12 @@ export interface SessionDetailResponse {
   messages?: MessageBlock[];
 }
 
+export interface ShareMessageInput {
+  id: string;
+  order: number;
+  content?: string;
+}
+
 export function fetchProjects(): Promise<Project[]> {
   return jget<{ projects: Project[] }>("/api/v1/projects").then((r) => r.projects);
 }
@@ -120,9 +126,13 @@ export function deleteShortcut(id: string): Promise<void> {
   ).then(() => undefined);
 }
 
-export function shareSession(id: string): Promise<{ url: string; localId: string }> {
+export function shareSession(
+  id: string,
+  input: { messages?: ShareMessageInput[] } = {},
+): Promise<{ url: string; localId: string }> {
   return jsend<{ url: string; localId: string }>(
     `/api/v1/sessions/${encodeURIComponent(id)}/share`,
     "POST",
+    input.messages ? { messages: input.messages } : undefined,
   );
 }

@@ -9,7 +9,12 @@ import { StateStore, toSafeRecord } from "./state.js";
 import { SessionIndexStore } from "./sessionIndex.js";
 import type { ProjectInfo } from "./sessionIndex.js";
 import type { ProjectPref } from "./types.js";
-import { buildTranscriptForShare } from "./api/transcript.js";
+import {
+  buildSelectedTranscriptForShare,
+  buildTranscriptForShare,
+  type BuiltTranscript,
+  type SelectedShareMessage,
+} from "./api/transcript.js";
 
 const DEFAULT_PAGE_LIMIT = 30;
 const MAX_PAGE_LIMIT = 100;
@@ -209,6 +214,7 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
       const v1ShareMatch = url.pathname.match(/^\/api\/v1\/sessions\/([^/]+)\/share$/);
       if (req.method === "POST" && v1ShareMatch) {
         return publishIndexedSession(
+          req,
           res,
           publishStore,
           sessionStore,
@@ -305,17 +311,34 @@ export async function startDashboard(options: DashboardOptions = {}): Promise<Da
   return { url, server, close: () => close(server) };
 }
 
-async function publishIndexedSession(res: http.ServerResponse, publishStore: StateStore, sessionStore: SessionIndexStore, id: string): Promise<void> {
+async function publishIndexedSession(req: http.IncomingMessage, res: http.ServerResponse, publishStore: StateStore, sessionStore: SessionIndexStore, id: string): Promise<void> {
   const session = await sessionStore.find(id);
   if (!session) return sendJson(res, { error: "session not found" }, 404);
   const workerUrl = process.env.WHAT7_WORKER_URL;
   const adminToken = process.env.WHAT7_ADMIN_TOKEN;
   if (!workerUrl) return sendJson(res, { error: "WHAT7_WORKER_URL is not set for this dashboard process" }, 409);
-  const built = await buildTranscriptForShare({
-    sourcePath: session.sourcePath,
-    sessionId: session.id,
-    stateDir: publishStore.dir,
-  });
+  const body = await readJson(req);
+  const selection = parseSelectedShareMessages(body.messages);
+  if (selection.error) return sendJson(res, { error: selection.error }, 400);
+  let built: BuiltTranscript;
+  if (selection.messages) {
+    try {
+      built = await buildSelectedTranscriptForShare({
+        session,
+        messages: await sessionStore.messages(session.id),
+        selection: selection.messages,
+        stateDir: publishStore.dir,
+      });
+    } catch (error) {
+      return sendJson(res, { error: error instanceof Error ? error.message : String(error) }, 400);
+    }
+  } else {
+    built = await buildTranscriptForShare({
+      sourcePath: session.sourcePath,
+      sessionId: session.id,
+      stateDir: publishStore.dir,
+    });
+  }
   const published = await new PublishClient({ workerUrl, adminToken }).publish({
     title: built.title,
     html: built.html,
@@ -332,6 +355,30 @@ async function publishIndexedSession(res: http.ServerResponse, publishStore: Sta
     htmlPath: built.htmlPath,
   });
   return sendJson(res, { record: toSafeRecord(record), url: published.url });
+}
+
+function parseSelectedShareMessages(value: unknown): { messages?: SelectedShareMessage[]; error?: string } {
+  if (value === undefined) return {};
+  if (!Array.isArray(value)) return { error: "messages must be an array" };
+  if (!value.length) return { error: "messages must include at least one selected message" };
+  if (value.length > 200) return { error: "messages selection is too large" };
+  const messages: SelectedShareMessage[] = [];
+  for (const [index, raw] of value.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return { error: `messages[${index}] must be an object` };
+    }
+    const item = raw as Record<string, unknown>;
+    const id = typeof item.id === "string" && item.id ? item.id : undefined;
+    const order = typeof item.order === "number" && Number.isInteger(item.order) && item.order >= 0 ? item.order : undefined;
+    if (!id && order === undefined) return { error: `messages[${index}] requires id or order` };
+    if (item.content !== undefined && typeof item.content !== "string") return { error: `messages[${index}].content must be a string` };
+    messages.push({
+      ...(id ? { id } : {}),
+      ...(order !== undefined ? { order } : {}),
+      ...(typeof item.content === "string" ? { content: item.content } : {}),
+    });
+  }
+  return { messages };
 }
 
 async function serveSpa(res: http.ServerResponse, pathname: string): Promise<void> {

@@ -57,6 +57,72 @@ describe("dashboard", () => {
 		await close(worker);
 	});
 
+	it("publishes selected edited messages through the share endpoint", async () => {
+		let publishedPayload: Record<string, unknown> | undefined;
+		const worker = http.createServer((req, res) => {
+			if (req.method === "POST" && req.url === "/api/share") {
+				let raw = "";
+				req.on("data", (chunk) => { raw += String(chunk); });
+				req.on("end", () => {
+					publishedPayload = JSON.parse(raw) as Record<string, unknown>;
+					res.writeHead(201, { "content-type": "application/json" });
+					res.end(JSON.stringify({
+						id: "remote_selected",
+						url: "http://127.0.0.1/s/remote_selected",
+						deleteToken: "selected-delete-token",
+						status: "published",
+					}));
+				});
+				return;
+			}
+			res.writeHead(404);
+			res.end();
+		});
+		await listen(worker, 0);
+		const workerAddress = worker.address();
+		if (!workerAddress || typeof workerAddress === "string") throw new Error("bad worker address");
+		const priorWorkerUrl = process.env.WHAT7_WORKER_URL;
+		const priorAdminToken = process.env.WHAT7_ADMIN_TOKEN;
+		process.env.WHAT7_WORKER_URL = `http://127.0.0.1:${workerAddress.port}`;
+		process.env.WHAT7_ADMIN_TOKEN = "admin-token";
+
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-selected-share-"));
+		const { dbPath } = buildCxsFixture(dir, sampleSessions());
+		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
+
+		try {
+			const response = await fetch(new URL("/api/v1/sessions/sess_a/share", dashboard.url), {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					messages: [
+						{ id: "sess_a:1", order: 1, content: "Edited **selection** only" },
+					],
+				}),
+			});
+			expect(response.status).toBe(200);
+			const json = (await response.json()) as { record: Record<string, unknown>; url: string };
+			expect(json.url).toContain("remote_selected");
+			expect(JSON.stringify(json)).not.toContain("selected-delete-token");
+			expect(json.record.hasDeleteCapability).toBe(true);
+			expect(json.record.title).toContain("selected");
+
+			const html = String(publishedPayload?.html ?? "");
+			expect(html).toContain("Edited");
+			expect(html).toContain("selection");
+			expect(html).not.toContain("Refactor the parser please");
+			expect(publishedPayload?.sourcePath).toBe("/codex/sess_a.jsonl");
+			expect(typeof publishedPayload?.sourceHash).toBe("string");
+		} finally {
+			await dashboard.close();
+			await close(worker);
+			if (priorWorkerUrl === undefined) delete process.env.WHAT7_WORKER_URL;
+			else process.env.WHAT7_WORKER_URL = priorWorkerUrl;
+			if (priorAdminToken === undefined) delete process.env.WHAT7_ADMIN_TOKEN;
+			else process.env.WHAT7_ADMIN_TOKEN = priorAdminToken;
+		}
+	});
+
 	it("serves cxs sessions through /api/v1/sessions, /api/v1/projects, /api/v1/sessions/:id", async () => {
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-cxs-"));
 		const { dbPath } = buildCxsFixture(dir, sampleSessions());

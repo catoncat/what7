@@ -30,7 +30,7 @@ If `what7` is not on your `PATH`, replace it with `node dist/cli.js`.
 - **Published** (`/published`): everything you've shared, same chip bar as search with `shared=1` on by default.
 - **Settings** (`/settings`): per-project `displayName` alias and `hidden` toggle, default landing route, theme.
 - **Shortcuts**: the `+` button in the sidebar pins whatever URL you're currently on. Internal URLs are probed on load; dead ones go grey with a tooltip.
-- **Share**: any session has a `Share` action that renders a clean standalone HTML and publishes it to your Worker. Delete capability is stored locally so you can always `unpublish`.
+- **Share**: any session has a `Share` action that renders a clean standalone HTML and publishes it to your Worker. You can also tick specific messages, edit the selected text inline, and `Share selected` as a trimmed artifact. Delete capability is stored locally so you can always `unpublish`.
 
 The reading pane is a session-level structured view — tool calls, reasoning, and events are hidden by default to match the shared-page experience.
 

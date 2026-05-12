@@ -58,7 +58,7 @@
 - I-07 `ping` / `(no title)` 噪声 session 继续观察，不先折叠，避免误伤真实短对话。
 - I-12 只保留已真实实现的 `⌘K`，`↑↓` / `S` 不作为 v1 blocker。
 
-默认 v1.1 首选切片（等真实反馈确认后再开 intent）：Turn/message 级裁剪 + 编辑后发布。最小形态是 ReadingPane 选择消息 → 预览选择数量 → `Share selected` → 复用现有 clean share renderer；暂不混入 Shiki、Published 独立 drag UI、message anchor 跳转或 Shortcut drag 排序。
+v1.1 首选切片已开工：Message 级裁剪 + 编辑后发布。当前最小形态是 ReadingPane 勾选消息 → 预览选择数量 → inline textarea 编辑 → `Share selected` → 复用现有 clean share renderer；暂不混入 Shiki、Published 独立 drag UI、message anchor 跳转或 Shortcut drag 排序。
 
 ---
 
