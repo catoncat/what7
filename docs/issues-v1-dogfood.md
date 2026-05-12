@@ -2,7 +2,7 @@
 
 基于 chrome devtools 真实浏览 + 真实 cxs 数据（~2956 session / 172 project）跑出来的问题清单。按严重度分 P0 / P1 / P2。
 
-**结论**：v1 形态已成，P0/P1 dogfood 问题已清；P2 残余继续按本清单收口。
+**结论**：v1 形态已成，P0/P1/P2 dogfood 主问题已清；I-07 继续观察，I-12 已降级为非阻塞。下一阶段先记录真实使用反馈，再统一 triage 成 v1.1。
 
 ---
 
@@ -32,6 +32,33 @@
 |---|---|---|
 | A-01 | 前端引入 @tanstack/vue-query 作 server-state 层 | ✅ 已落地 (int_bbcfbe59) |
 | A-02 | `npm run dev` 一键起前后端 (concurrently + tsx watch) | ✅ 已落地 (int_bbcfbe59) |
+
+---
+
+## 下一轮 dogfood 记录规则（v1.1 输入）
+
+从 2026-05-12 起，新增问题先追加到本节，不立刻动手修。满 5 条真实反馈，或连续 dogfood 一周后，再统一 triage 成 v1.1 batch。
+
+记录模板：
+
+```md
+### D-YYYYMMDD-N · <一句话标题>
+
+- URL：`http://127.0.0.1:7717/...`
+- Session：`<session id>`（如果相关）
+- 路径：Recent / Search / Published / ReadingPane / Share / Settings
+- 现象：
+- 期望：
+- 严重度：P0 / P1 / P2 / polish
+- 备注：截图可选；不要贴 token / delete capability / 本地私密内容。
+```
+
+当前观察项：
+
+- I-07 `ping` / `(no title)` 噪声 session 继续观察，不先折叠，避免误伤真实短对话。
+- I-12 只保留已真实实现的 `⌘K`，`↑↓` / `S` 不作为 v1 blocker。
+
+默认 v1.1 首选切片（等真实反馈确认后再开 intent）：Turn/message 级裁剪 + 编辑后发布。最小形态是 ReadingPane 选择消息 → 预览选择数量 → `Share selected` → 复用现有 clean share renderer；暂不混入 Shiki、Published 独立 drag UI、message anchor 跳转或 Shortcut drag 排序。
 
 ---
 
