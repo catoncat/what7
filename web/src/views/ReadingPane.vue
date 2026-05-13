@@ -86,7 +86,7 @@ async function onShare() {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    flashToast(msg.includes("WHAT7_WORKER_URL") ? "Worker not configured" : `Share failed: ${msg}`, "err");
+    flashToast(`Share failed: ${msg}`, "err");
   }
 }
 
@@ -133,7 +133,7 @@ async function onShareSelected() {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    flashToast(msg.includes("WHAT7_WORKER_URL") ? "Worker not configured" : `Share selected failed: ${msg}`, "err");
+    flashToast(`Share selected failed: ${msg}`, "err");
   }
 }
 

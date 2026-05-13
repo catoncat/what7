@@ -9,6 +9,7 @@ import { StateStore, toSafeRecord } from "./state.js";
 import { SessionIndexStore, syncSessions } from "./sessionIndex.js";
 import { PublishClient } from "./publishClient.js";
 import { CxsReader, DEFAULT_CXS_DB_PATH } from "./cxsReader.js";
+import { loadLocalDeployEnv, type LoadLocalDeployEnvResult } from "./localEnv.js";
 
 interface GlobalOptions {
   stateDir?: string;
@@ -93,7 +94,8 @@ program
   .action(async (options: { json?: boolean }) => {
     await run(async () => {
       const globals = program.opts<GlobalOptions>();
-      const report = await runDoctor(globals.stateDir);
+      const localEnv = await loadLocalDeployEnv();
+      const report = await runDoctor(globals.stateDir, localEnv);
       const asJson = options.json || globals.json;
       if (asJson) {
         console.log(JSON.stringify(report, null, 2));
@@ -117,6 +119,7 @@ program
   .action(async (options: { port?: number; open?: boolean; json?: boolean }) => {
     await run(async () => {
       const globals = program.opts<GlobalOptions>();
+      await loadLocalDeployEnv();
       const handle = await startDashboard({ stateDir: globals.stateDir, port: options.port ?? 0, open: options.open !== false });
       output(options.json || globals.json, { url: handle.url }, `Dashboard: ${handle.url}\nPress Ctrl-C to stop.`);
     });
@@ -177,11 +180,18 @@ interface DoctorReport {
   cxs_db_path: string;
   worker_url: string | null;
   admin_token_set: boolean;
+  local_deploy_env: {
+    file: string;
+    found: boolean;
+    loaded: string[];
+    skipped_existing: string[];
+  };
   checks: DoctorCheck[];
 }
 
-async function runDoctor(stateDir?: string): Promise<DoctorReport> {
+async function runDoctor(stateDir?: string, localEnv?: LoadLocalDeployEnvResult): Promise<DoctorReport> {
   const store = new StateStore(stateDir);
+  const resolvedLocalEnv = localEnv ?? (await loadLocalDeployEnv());
   const cxsPath = process.env.CXS_DB ?? DEFAULT_CXS_DB_PATH;
   const workerUrl = process.env.WHAT7_WORKER_URL ?? null;
   const adminToken = Boolean(process.env.WHAT7_ADMIN_TOKEN);
@@ -232,6 +242,17 @@ async function runDoctor(stateDir?: string): Promise<DoctorReport> {
   }
 
   // worker env
+  if (resolvedLocalEnv.found) {
+    const keys = [...resolvedLocalEnv.loaded, ...resolvedLocalEnv.skippedExisting];
+    checks.push({
+      label: "local deploy env",
+      status: true,
+      detail: keys.length
+        ? `${resolvedLocalEnv.file} · ${keys.join(", ")} available`
+        : `${resolvedLocalEnv.file} · no supported keys found`,
+    });
+  }
+
   if (workerUrl) {
     checks.push({
       label: "worker url",
@@ -268,6 +289,12 @@ async function runDoctor(stateDir?: string): Promise<DoctorReport> {
     cxs_db_path: cxsPath,
     worker_url: workerUrl,
     admin_token_set: adminToken,
+    local_deploy_env: {
+      file: resolvedLocalEnv.file,
+      found: resolvedLocalEnv.found,
+      loaded: resolvedLocalEnv.loaded,
+      skipped_existing: resolvedLocalEnv.skippedExisting,
+    },
     checks,
   };
 }

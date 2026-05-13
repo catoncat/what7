@@ -8,7 +8,7 @@ import type {
 
 async function jget<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`);
+  if (!res.ok) throw new Error(await formatHttpError(res, path));
   return (await res.json()) as T;
 }
 
@@ -19,8 +19,32 @@ async function jsend<T>(path: string, method: string, body?: unknown): Promise<T
     init.body = JSON.stringify(body);
   }
   const res = await fetch(path, init);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`);
+  if (!res.ok) throw new Error(await formatHttpError(res, path));
   return (await res.json()) as T;
+}
+
+async function formatHttpError(res: Response, path: string): Promise<string> {
+  const detail = await readErrorDetail(res);
+  return `${res.status} ${res.statusText}${detail ? `: ${detail}` : ""} — ${path}`;
+}
+
+async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const body = (await res.json()) as unknown;
+      if (body && typeof body === "object") {
+        const { error, message } = body as { error?: unknown; message?: unknown };
+        if (typeof error === "string" && error.trim()) return error.trim();
+        if (typeof message === "string" && message.trim()) return message.trim();
+      }
+      return "";
+    }
+    const text = (await res.text()).trim();
+    return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+  } catch {
+    return "";
+  }
 }
 
 export interface SessionPage {

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -56,11 +56,17 @@ describe("CxsReader", () => {
 	});
 
 	it("analytics() aggregates session/project counts", () => {
-		const a = reader.analytics();
-		expect(a.sessionCount).toBe(3);
-		expect(a.projectCount).toBe(2);
-		// last 7 days: sess_a (today) + sess_b (2 days ago) — sess_c is 30 days old
-		expect(a.last7dSessionCount).toBe(2);
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-05-07T12:00:00.000Z"));
+		try {
+			const a = reader.analytics();
+			expect(a.sessionCount).toBe(3);
+			expect(a.projectCount).toBe(2);
+			// last 7 days: sess_a (today) + sess_b (2 days ago) — sess_c is 30 days old
+			expect(a.last7dSessionCount).toBe(2);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("listProjects() groups by cwd with basename slug", () => {
