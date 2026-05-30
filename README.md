@@ -1,5 +1,7 @@
 # what7
 
+![what7 — browse, read, and share past Codex sessions from a local web app](docs/what7.png)
+
 A local browse / preview / share product layer for Codex sessions. `what7` is the human companion to `cxs`: `cxs` owns the recall index, `what7` gives you a web app on top that lets you find a past conversation, read it cleanly, pin the views you care about, and publish a shareable read-only page through a Cloudflare Worker.
 
 > `cxs` is the agent-facing recall infrastructure. `what7` reuses that index (`~/.local/state/cxs/index.sqlite`) read-only and adds a human surface. **It does not rebuild another index.**
