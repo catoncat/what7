@@ -26,6 +26,7 @@ describe("dashboard", () => {
 		if (!workerAddress || typeof workerAddress === "string") throw new Error("bad worker address");
 
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "what7-dashboard-"));
+		const { dbPath } = buildCxsFixture(dir, sampleSessions());
 		const store = new StateStore(dir);
 		const record = await store.add({
 			remoteId: "remote_dash",
@@ -36,7 +37,7 @@ describe("dashboard", () => {
 			workerUrl: `http://127.0.0.1:${workerAddress.port}`,
 		});
 
-		const dashboard = await startDashboard({ stateDir: dir, port: 0, open: false });
+		const dashboard = await startDashboard({ stateDir: dir, dbPath, port: 0, open: false });
 
 		const listed = (await (await fetch(new URL("/api/v1/shares", dashboard.url))).json()) as {
 			shares: Array<Record<string, unknown>>;
