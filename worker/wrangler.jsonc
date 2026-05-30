@@ -8,10 +8,12 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  // Run `npx wrangler kv namespace create WHAT7_SHARES` and paste the returned
+  // id below. The placeholder will not deploy as-is.
   "kv_namespaces": [
     {
       "binding": "WHAT7_SHARES",
-      "id": "e50b464081f2485c8706377b1797f077"
+      "id": "<your-kv-namespace-id>"
     }
   ]
 }

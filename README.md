@@ -4,6 +4,11 @@ A local browse / preview / share product layer for Codex sessions. `what7` is th
 
 > `cxs` is the agent-facing recall infrastructure. `what7` reuses that index (`~/.local/state/cxs/index.sqlite`) read-only and adds a human surface. **It does not rebuild another index.**
 
+## Prerequisites
+
+- **Node.js >= 20.**
+- **[`cxs`](https://github.com/catoncat/cxs) installed and synced.** `what7` does not build its own index — it reads the SQLite index that `cxs` maintains. Run `cxs sync` at least once so `~/.local/state/cxs/index.sqlite` exists, or point `what7` at a different index with the `CXS_DB` env var. Without it, `what7 serve` has nothing to show. (Tests ship their own fixture index, so the test suite runs without `cxs`.)
+
 ## Quickstart
 
 ```bash

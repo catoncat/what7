@@ -4,7 +4,7 @@ Current Cloudflare deployment created for this repo:
 
 - Worker name: `what7-share`
 - KV namespace title: `what7-shares`
-- Public Worker URL: `https://what7-share.copyright.workers.dev`
+- Public Worker URL: `https://what7-share.<your-subdomain>.workers.dev`
 
 Secrets are not stored in this repository. The production `WHAT7_ADMIN_TOKEN` is set as a Cloudflare Worker secret and should be kept in a local secret manager or shell environment when publishing.
 
@@ -35,7 +35,7 @@ what7 doctor --json                                 # verify cxs db / state dir 
 
 Run this manually after CI passes, or before trusting a new Worker / env setup. Do not put Worker secrets in CI, commits, screenshots, or issue logs.
 
-Last verified: 2026-05-12 against the live `what7-share.copyright.workers.dev` Worker. The smoke published one real session, confirmed the public share URL returned HTML, confirmed `what7 list --json` did not expose `deleteCapability`, unpublished the share, and confirmed the public URL returned the unpublished page.
+Last verified: 2026-05-12 against the live `what7-share.<your-subdomain>.workers.dev` Worker. The smoke published one real session, confirmed the public share URL returned HTML, confirmed `what7 list --json` did not expose `deleteCapability`, unpublished the share, and confirmed the public URL returned the unpublished page.
 
 ### Option A — live Worker env
 
